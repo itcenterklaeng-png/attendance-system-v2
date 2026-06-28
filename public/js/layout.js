@@ -9,12 +9,14 @@ const LOGO_URL = 'https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DL
 
 // เมนูทั้งหมด — กรองตาม role ตอน render (เอา "หน้าแรก" ออก — เช็คชื่อเป็นหน้าหลัก)
 const MENU = [
-  { id: 'attendance',     href: 'attendance.html',           icon: 'fa-clipboard-check',label: 'เช็คชื่อนักเรียน',   roles: ['admin','user'] },
-  { id: 'attendance-status', href: 'attendance-status.html',  icon: 'fa-tasks',          label: 'ตรวจสอบสถานะเช็คชื่อ', roles: ['admin','user'] },
-  { id: 'reports',        href: 'reports.html',              icon: 'fa-chart-bar',      label: 'รายงานเช็คชื่อ',     roles: ['admin','user','executive'] },
-  { id: 'teaching-log-reports', href: 'teaching-log-reports.html', icon: 'fa-file-alt', label: 'รายงานบันทึกหลังสอน', roles: ['admin','user','executive'] },
-  { id: 'dashboard',      href: 'dashboard.html',            icon: 'fa-tachometer-alt', label: 'แดชบอร์ด',           roles: ['admin','executive'] },
-  { id: 'admin',          href: 'admin.html',                icon: 'fa-cog',            label: 'จัดการระบบ',         roles: ['admin'] }
+  // ⭐ เมนูหลัก — สำหรับครูทุกคน + admin (เรียงตามที่ user ระบุ)
+  { id: 'attendance',           href: 'attendance.html',           icon: 'fa-clipboard-check',label: 'เช็คชื่อนักเรียน',       roles: ['admin','user'] },
+  { id: 'reports',              href: 'reports.html',              icon: 'fa-chart-bar',      label: 'รายงานการเช็คชื่อ',     roles: ['admin','user','executive'] },
+  { id: 'teaching-log-reports', href: 'teaching-log-reports.html', icon: 'fa-file-alt',       label: 'รายงานบันทึกหลังสอน',   roles: ['admin','user','executive'] },
+  { id: 'attendance-status',    href: 'attendance-status.html',    icon: 'fa-tasks',          label: 'ตรวจสอบสถานะเช็คชื่อ',  roles: ['admin','user'] },
+  // ⭐ เมนู admin / executive — อยู่ด้านล่าง
+  { id: 'dashboard',            href: 'dashboard.html',            icon: 'fa-tachometer-alt', label: 'แดชบอร์ด',               roles: ['admin','executive'] },
+  { id: 'admin',                href: 'admin.html',                icon: 'fa-cog',            label: 'จัดการระบบ',             roles: ['admin'] }
 ];
 
 /**
@@ -127,7 +129,12 @@ function injectShell(profile, activeId, opts) {
              : profile.role === 'executive' ? 'ผู้บริหาร'
              : 'ครู';
   const teacherIdLine = profile.teacher_id ? `<div style="font-size:11px;opacity:.7">รหัส: ${escapeHtml(profile.teacher_id)}</div>` : '';
-  const navItems = MENU.filter(m => m.roles.includes(profile.role)).map(m => {
+  // ⭐ เมนูแยก 2 กลุ่ม — กลุ่มหลัก vs กลุ่ม admin/executive
+  const ADMIN_ONLY_IDS = new Set(['dashboard', 'admin']);
+  const allowed = MENU.filter(m => m.roles.includes(profile.role));
+  const visibleAdminCount = allowed.filter(m => ADMIN_ONLY_IDS.has(m.id)).length;
+
+  const renderNavBtn = (m) => {
     const active = m.id === activeId;
     const baseStyle = `display:flex;align-items:center;gap:10px;padding:11px 18px;text-decoration:none;font-size:13.5px;font-weight:${active ? 600 : 500};color:${active ? '#fff' : 'rgba(255,255,255,.75)'};background:${active ? 'rgba(255,255,255,.14)' : 'transparent'};border-left:3px solid ${active ? '#ffd600' : 'transparent'};transition:all .18s;`;
     return `
@@ -136,7 +143,18 @@ function injectShell(profile, activeId, opts) {
         <span>${escapeHtml(m.label)}</span>
       </a>
     `;
-  }).join('');
+  };
+
+  const mainItems = allowed.filter(m => !ADMIN_ONLY_IDS.has(m.id)).map(renderNavBtn).join('');
+  const adminItems = allowed.filter(m => ADMIN_ONLY_IDS.has(m.id)).map(renderNavBtn).join('');
+
+  // เพิ่ม divider + section label ถ้ามีเมนู admin
+  const dividerHtml = visibleAdminCount > 0 ? `
+    <div style="margin:10px 16px 4px;padding-top:10px;border-top:1px solid rgba(255,255,255,.12);font-size:10.5px;color:rgba(255,214,0,.7);font-weight:700;letter-spacing:.5px;">
+      <i class="fas fa-shield-alt me-1"></i> ผู้ดูแลระบบ
+    </div>
+  ` : '';
+  const navItems = mainItems + dividerHtml + adminItems;
 
   // sidebar overlay (mobile)
   const overlay = document.createElement('div');
