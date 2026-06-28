@@ -191,11 +191,7 @@
 
     const profile = await requireAuth();
     if (!profile) throw new Error('not authed');
-    if (!['admin', 'executive'].includes(profile.role)) {
-      alert('แดชบอร์ดสำหรับ admin / ผู้บริหาร เท่านั้น');
-      window.location.href = 'attendance.html';
-      throw new Error('not admin/executive');
-    }
+    // ⭐ แดชบอร์ดเปิดให้ทุก role (admin / executive / user)
     initLayout(profile, 'dashboard', { title: 'แดชบอร์ด', icon: 'fa-tachometer-alt' });
 
     const elDate  = document.getElementById('dash-date');
