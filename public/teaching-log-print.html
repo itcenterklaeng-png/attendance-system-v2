@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>บันทึกหลังการสอน — Print</title>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --maroon: #7B1F2B;
+      --black: #000;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      font-family: 'Sarabun', 'TH SarabunPSK', sans-serif;
+      margin: 0; padding: 0;
+      background: #f0f2f5;
+      color: var(--black);
+    }
+    .toolbar {
+      background: #1a237e; color: #fff;
+      padding: .8rem 1.2rem;
+      display: flex; align-items: center; gap: .6rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
+      position: sticky; top: 0; z-index: 10;
+    }
+    .toolbar h1 { font-size: 1rem; margin: 0; flex: 1; }
+    .toolbar button {
+      padding: .45rem 1.1rem; border: none; border-radius: 6px;
+      cursor: pointer; font-weight: 600; font-family: inherit;
+      display: inline-flex; align-items: center; gap: .4rem;
+      transition: .15s;
+    }
+    .btn-pdf { background: #dc2626; color: #fff; }
+    .btn-pdf:hover { background: #b91c1c; }
+    .btn-word { background: #1d4ed8; color: #fff; }
+    .btn-word:hover { background: #1e40af; }
+    .btn-close { background: rgba(255,255,255,.18); color: #fff; }
+    .btn-close:hover { background: rgba(255,255,255,.28); }
+
+    /* A4 print sheet */
+    #sheet {
+      width: 21cm; min-height: 29.7cm;
+      margin: 1cm auto;
+      background: #fff;
+      padding: .5cm 1.2cm 1cm;
+      box-shadow: 0 8px 25px rgba(0,0,0,.12);
+      font-size: 12pt;
+      line-height: 1.4;
+    }
+    #sheet.loading {
+      display: flex; align-items: center; justify-content: center;
+      color: #94a3b8;
+    }
+
+    /* Header */
+    .doc-header {
+      display: grid;
+      grid-template-columns: 110px 1fr 110px;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .doc-header .logo, .doc-header .photo {
+      width: 100px; height: 100px;
+      object-fit: contain;
+      background: #f8fafc;
+      border-radius: 6px;
+    }
+    .doc-header .photo { object-fit: cover; }
+    .doc-header .title { text-align: center; }
+    .doc-header .title-1 { font-size: 22pt; font-weight: 700; color: var(--maroon); line-height: 1.1; }
+    .doc-header .title-2 { font-size: 16pt; font-weight: 700; color: var(--maroon); line-height: 1.1; }
+    .doc-header .title-3 { font-size: 14pt; font-weight: 700; color: var(--maroon); line-height: 1.2; }
+
+    /* Date line */
+    .date-line {
+      text-align: center;
+      font-size: 18pt;
+      margin: 4px 0 8px;
+    }
+    .date-line .lbl { color: var(--maroon); font-weight: 700; }
+    .date-line .val { color: var(--black); }
+
+    /* Photo + info row */
+    .photo-info {
+      display: grid; grid-template-columns: 320px 1fr;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .teach-photo {
+      width: 320px; min-height: 180px;
+      background: #f1f5f9;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 6px;
+      color: #94a3b8; font-size: 11pt;
+      overflow: hidden;
+    }
+    .teach-photo img { width: 100%; display: block; }
+    .info-cell { font-size: 12pt; }
+    .info-row { margin: 2px 0; }
+    .info-row .lbl { color: var(--maroon); font-weight: 700; font-size: 14pt; }
+    .info-row .val { color: var(--black); }
+
+    /* Sections */
+    .section { margin-top: 6px; }
+    .section-title {
+      color: var(--maroon); font-weight: 700; font-size: 14pt;
+      margin-bottom: 2px;
+    }
+    .section-body { padding-left: 29px; font-size: 12pt; white-space: pre-wrap; }
+
+    /* PRINT MODE */
+    @media print {
+      body { background: #fff; }
+      .toolbar { display: none; }
+      #sheet {
+        margin: 0; box-shadow: none; padding: 0 1.2cm 1cm;
+        width: 100%; min-height: 100vh;
+      }
+      @page { size: A4 portrait; margin: 0.8cm 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <h1>📄 บันทึกหลังการสอน — Print Preview</h1>
+    <button class="btn-pdf" id="btn-do-pdf"><i>📕</i> ดาวน์โหลด PDF</button>
+    <button class="btn-word" id="btn-do-word"><i>📘</i> ดาวน์โหลด Word</button>
+    <button class="btn-close" onclick="window.close()">ปิด</button>
+  </div>
+
+  <div id="sheet" class="loading">⏳ กำลังโหลดข้อมูล...</div>
+
+  <script type="module">
+    import { requireAuth } from './js/auth.js';
+    import { supabase } from './js/supabase-client.js';
+    import { listTeachingLogs, getAttendanceSummary } from './js/api.js';
+
+    const profile = await requireAuth({ requireChangePassword: false });
+    if (!profile) throw new Error('not authed');
+
+    const params = new URLSearchParams(location.search);
+    const subjectId = params.get('subject');
+    const date = params.get('date');
+    const action = params.get('action'); // 'pdf' | 'word' | null
+
+    if (!subjectId || !date) {
+      document.getElementById('sheet').innerHTML = '⚠ ขาด subject หรือ date ใน URL';
+      throw new Error('missing params');
+    }
+
+    function escapeHtml(s) {
+      if (s == null) return '';
+      return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    // ---- โหลดข้อมูล ----
+    async function loadData() {
+      // 1. teaching log
+      const logs = await listTeachingLogs({ subjectId, dateFrom: date, dateTo: date });
+      const log = logs && logs[0];
+
+      // 2. subject + classes (จาก enrollments)
+      const { data: subj } = await supabase
+        .from('subjects')
+        .select('subject_id, subject_name, major')
+        .eq('subject_id', subjectId).maybeSingle();
+
+      // 3. teacher (ผู้ใช้ปัจจุบันที่ login = profile)
+      const teacherName = profile.teacher_full_name || profile.full_name || profile.email;
+      const department = profile.department || '';
+
+      // 4. classes ของวิชา (จาก enrollments → classes)
+      const { data: enrolls } = await supabase
+        .from('enrollments')
+        .select('class_id, classes(class_id, major, level, year, room)')
+        .eq('subject_id', subjectId);
+      const uniqClasses = {};
+      (enrolls || []).forEach(e => { if (e.classes) uniqClasses[e.class_id] = e.classes; });
+      const classList = Object.values(uniqClasses);
+      const majors = [...new Set(classList.map(c => c.major).filter(Boolean))].join(', ');
+      const levels = [...new Set(classList.map(c => c.level).filter(Boolean))].join(', ');
+      const years  = [...new Set(classList.map(c => c.year).filter(Boolean))].join(', ');
+      const rooms  = [...new Set(classList.map(c => c.room).filter(Boolean))].join(', ');
+
+      // 5. attendance summary
+      let attSummary = { present: 0, absent: 0, late: 0, sick: 0, personal: 0, total: 0 };
+      try {
+        const sm = await getAttendanceSummary({ subjectId, dateFrom: date, dateTo: date });
+        if (sm && sm.length > 0) {
+          attSummary = {
+            present:  sm.reduce((s,r) => s + (r.present_count  || 0), 0),
+            absent:   sm.reduce((s,r) => s + (r.absent_count   || 0), 0),
+            late:     sm.reduce((s,r) => s + (r.late_count     || 0), 0),
+            sick:     sm.reduce((s,r) => s + (r.sick_count     || 0), 0),
+            personal: sm.reduce((s,r) => s + (r.personal_count || 0), 0),
+            total:    sm.reduce((s,r) => s + (r.total_records  || 0), 0)
+          };
+        }
+      } catch (e) { /* ไม่มีก็แสดง 0 */ }
+
+      // 6. ภาคเรียน + ปีการศึกษา (จากวันที่)
+      const d = new Date(date);
+      const month = d.getMonth() + 1;
+      const term = month >= 5 && month <= 10 ? 1 : 2;
+      const academicYear = (term === 1)
+        ? (d.getFullYear() + 543)
+        : (month >= 11 ? d.getFullYear() + 543 : d.getFullYear() + 542);
+
+      return { log, subj, teacherName, department, majors, levels, years, rooms, attSummary, term, academicYear };
+    }
+
+    function thaiDate(ymd) {
+      const M = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+      const dd = parseInt(ymd.slice(8,10),10);
+      const mm = parseInt(ymd.slice(5,7),10);
+      const yy = parseInt(ymd.slice(0,4),10) + 543;
+      return { dd, month: M[mm-1] || '', yy };
+    }
+
+    function render(d) {
+      const log = d.log || {};
+      const t = thaiDate(date);
+      const SCHOOL_LOGO = 'https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DLEchopSbfi&sz=w200';
+      const photoHtml = log.image_url
+        ? `<img src="${escapeHtml(log.image_url)}" alt="ภาพการสอน" />`
+        : '<span>[ไม่มีรูปภาพ]</span>';
+      const classText = [d.levels, d.years && `ปี${d.years}`, d.rooms && `กลุ่ม${d.rooms}`, d.majors]
+        .filter(Boolean).join(' ');
+
+      const sections = [
+        ['1. สื่อและอุปกรณ์ที่ใช้ในการจัดการเรียนการสอน', log.materials],
+        ['2. รายละเอียดของสิ่งที่ทำการสอน', log.content],
+        ['3. วิธีการเสริมแรงให้ผู้เรียนมีความมุ่งมั่นตั้งใจ', log.motivation],
+        ['4. ผลการจัดการเรียนการสอน', log.results],
+        ['5. ปัญหาและอุปสรรคในการจัดการเรียนการสอน', log.problems]
+      ];
+      const sectionsHtml = sections.map(([title, body]) => `
+        <div class="section">
+          <div class="section-title">${escapeHtml(title)}</div>
+          <div class="section-body">${escapeHtml((body || '—').trim() || '—')}</div>
+        </div>
+      `).join('');
+
+      document.getElementById('sheet').className = '';
+      document.getElementById('sheet').innerHTML = `
+        <div class="doc-header">
+          <img class="logo" src="${SCHOOL_LOGO}" alt="โลโก้" />
+          <div class="title">
+            <div class="title-1">บันทึกหลังการสอน</div>
+            <div class="title-2">วิทยาลัยการอาชีพแกลง</div>
+            <div class="title-3">ภาคเรียนที่ ${d.term}   ปีการศึกษา ${d.academicYear}</div>
+          </div>
+          <div class="photo"><span style="color:#94a3b8;font-size:9pt;">[ภาพครู]</span></div>
+        </div>
+
+        <div class="date-line">
+          <span class="lbl">วันที่ </span><span class="val">....${t.dd}....   </span>
+          <span class="lbl">เดือน </span><span class="val">....${escapeHtml(t.month)}....   </span>
+          <span class="lbl">พ.ศ. </span><span class="val">....${t.yy}....</span>
+        </div>
+
+        <div class="photo-info">
+          <div class="teach-photo">${photoHtml}</div>
+          <div class="info-cell">
+            <div class="info-row"><span class="lbl">รหัสวิชา :</span> <span class="val">${escapeHtml(subjectId)}</span></div>
+            <div class="info-row"><span class="lbl">รายวิชา :</span> <span class="val">${escapeHtml(d.subj?.subject_name || '-')}</span></div>
+            <div class="info-row"><span class="lbl">ระดับชั้น/แผนก :</span> <span class="val">${escapeHtml(classText || '-')}</span></div>
+            <div class="info-row"><span class="lbl">ครูผู้สอน :</span> <span class="val">${escapeHtml(d.teacherName)}</span></div>
+            <div class="info-row"><span class="lbl">จำนวนนักเรียน :</span> <span class="val">${d.attSummary.total} คน / มา ${d.attSummary.present} / ขาด ${d.attSummary.absent} / สาย ${d.attSummary.late} / ลาป่วย ${d.attSummary.sick} / ลากิจ ${d.attSummary.personal}</span></div>
+          </div>
+        </div>
+
+        ${sectionsHtml}
+      `;
+    }
+
+    function downloadAsWord() {
+      const sheet = document.getElementById('sheet');
+      // Wrap HTML ให้ Word เปิดอ่านได้
+      const html = `
+        <html xmlns:o='urn:schemas-microsoft-com:office:office'
+              xmlns:w='urn:schemas-microsoft-com:office:word'
+              xmlns='http://www.w3.org/TR/REC-html40'>
+        <head><meta charset="utf-8" /><title>บันทึกหลังการสอน</title>
+        <style>
+          body { font-family: 'Sarabun', 'TH SarabunPSK', sans-serif; font-size: 12pt; }
+          .doc-header { width: 100%; }
+          .doc-header table { width: 100%; }
+          .maroon { color: #7B1F2B; font-weight: 700; }
+          .section-title { color: #7B1F2B; font-weight: 700; font-size: 14pt; margin-top: 8px; }
+          .section-body { padding-left: 29px; }
+          img { max-width: 320px; }
+        </style></head>
+        <body>${sheet.innerHTML}</body>
+        </html>
+      `;
+      const blob = new Blob(['﻿', html], { type: 'application/msword' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `บันทึกหลังการสอน_${subjectId}_${date}.doc`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    document.getElementById('btn-do-pdf').onclick = () => window.print();
+    document.getElementById('btn-do-word').onclick = downloadAsWord;
+
+    // โหลด + render
+    try {
+      const d = await loadData();
+      render(d);
+      // ถ้ามาจาก URL action → trigger เลย
+      if (action === 'pdf') setTimeout(() => window.print(), 700);
+      if (action === 'word') setTimeout(() => downloadAsWord(), 500);
+    } catch (e) {
+      document.getElementById('sheet').innerHTML = `<div style="color:#dc2626;padding:2rem;">โหลดข้อมูลไม่สำเร็จ: ${escapeHtml(e.message)}</div>`;
+    }
+  </script>
+</body>
+</html>
