@@ -84,6 +84,50 @@
     <div style="height:2rem;"></div>
   </div>
 
+  <!-- ✨ Confirm Modal (ก่อนบันทึก) -->
+  <div id="confirm-modal" class="att-modal-bg" style="display:none;">
+    <div class="att-modal-card">
+      <div class="att-modal-header">
+        <i class="fas fa-clipboard-check" style="color:#1a237e;font-size:1.6rem;"></i>
+        <div>
+          <div class="att-modal-title">ยืนยันการบันทึก</div>
+          <div class="att-modal-sub" id="confirm-sub">รอบ 1</div>
+        </div>
+      </div>
+
+      <div class="att-confirm-summary">
+        <div class="att-summary-row"><span>👥 เลือกแล้ว</span> <b id="cm-total">0</b> คน</div>
+        <div id="cm-breakdown" class="att-summary-breakdown"></div>
+      </div>
+
+      <div class="att-modal-actions">
+        <button class="btn btn-secondary" id="cm-cancel">
+          <i class="fas fa-times me-1"></i> ยกเลิก
+        </button>
+        <button class="btn btn-primary" id="cm-ok">
+          <i class="fas fa-save me-1"></i> บันทึก
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ✨ Success Modal (หลังบันทึกสำเร็จ) -->
+  <div id="success-modal" class="att-modal-bg" style="display:none;">
+    <div class="att-modal-card att-success-card">
+      <div class="att-success-circle">
+        <svg viewBox="0 0 52 52">
+          <circle class="att-check-circle" cx="26" cy="26" r="25" fill="none"/>
+          <path class="att-check-mark" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+        </svg>
+      </div>
+      <div class="att-success-title" id="sm-title">บันทึกรอบ 1 สำเร็จ</div>
+      <div class="att-success-sub" id="sm-sub">เพิ่ม 0 รายการ</div>
+      <button class="btn btn-primary btn-lg" id="sm-ok" style="min-width:160px;">
+        <i class="fas fa-check me-1"></i> เรียบร้อย
+      </button>
+    </div>
+  </div>
+
   <script type="module">
     import { requireAuth } from './js/auth.js';
     import { initLayout } from './js/layout.js';
@@ -317,31 +361,193 @@
       document.getElementById('cnt-total').textContent = currentStudents.length;
     }
 
-    document.getElementById('btn-save').onclick = async () => {
+    // ===== Modal helpers =====
+    const confirmModal = document.getElementById('confirm-modal');
+    const successModal = document.getElementById('success-modal');
+
+    function openConfirmModal() {
+      const round = parseInt(elRound.value, 10);
+      document.getElementById('confirm-sub').textContent = round === 2 ? 'รอบ 2 (ออกท้ายคาบ)' : 'รอบ 1 (เข้าเรียน)';
+      document.getElementById('cm-total').textContent = currentRecords.size;
+
+      // breakdown by status
+      const cnt = { 'มา': 0, 'ขาด': 0, 'สาย': 0, 'ลาป่วย': 0, 'ลากิจ': 0 };
+      currentRecords.forEach(r => { if (cnt[r.status] != null) cnt[r.status]++; });
+      const chips = [
+        { code: 'มา',     bg: '#dcfce7', fg: '#16a34a', icon: '✓' },
+        { code: 'ขาด',    bg: '#fee2e2', fg: '#dc2626', icon: '✗' },
+        { code: 'สาย',    bg: '#fef3c7', fg: '#d97706', icon: '⏰' },
+        { code: 'ลาป่วย', bg: '#e0e7ff', fg: '#4f46e5', icon: '💊' },
+        { code: 'ลากิจ',  bg: '#f3e8ff', fg: '#9333ea', icon: '📝' }
+      ];
+      document.getElementById('cm-breakdown').innerHTML = chips
+        .filter(c => cnt[c.code] > 0)
+        .map(c => `<div class="att-chip" style="background:${c.bg};color:${c.fg};">
+          <span>${c.icon} ${c.code}</span><b>${cnt[c.code]}</b>
+        </div>`).join('');
+
+      confirmModal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+    function closeConfirmModal() {
+      confirmModal.style.display = 'none';
+      document.body.style.overflow = '';
+    }
+    function openSuccessModal(round, added) {
+      document.getElementById('sm-title').textContent = `บันทึก${round === 2 ? 'รอบ 2' : 'รอบ 1'}สำเร็จ`;
+      document.getElementById('sm-sub').textContent = `บันทึก ${added} รายการเรียบร้อย`;
+      successModal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+    function closeSuccessModal() {
+      successModal.style.display = 'none';
+      document.body.style.overflow = '';
+    }
+    document.getElementById('cm-cancel').onclick = closeConfirmModal;
+    document.getElementById('sm-ok').onclick = closeSuccessModal;
+    // ปิด modal ด้วยการคลิก backdrop
+    confirmModal.addEventListener('click', (e) => { if (e.target === confirmModal) closeConfirmModal(); });
+    successModal.addEventListener('click', (e) => { if (e.target === successModal) closeSuccessModal(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (confirmModal.style.display === 'flex') closeConfirmModal();
+        if (successModal.style.display === 'flex') closeSuccessModal();
+      }
+    });
+
+    // ===== Save =====
+    document.getElementById('btn-save').onclick = () => {
       if (currentRecords.size === 0) { showAlert('ยังไม่ได้เลือกสถานะ', 'error', 0); return; }
-      if (!confirm(`บันทึกเช็คชื่อ ${currentRecords.size} คน?`)) return;
+      openConfirmModal();
+    };
+    document.getElementById('cm-ok').onclick = async () => {
+      const ok = document.getElementById('cm-ok');
+      ok.disabled = true; ok.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> กำลังบันทึก...';
       const btn = document.getElementById('btn-save');
       btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> กำลังบันทึก...';
+
       const records = [];
       currentRecords.forEach((r, sid) => records.push({
         student_id: sid, status: r.status, note: r.note || '',
         late_at: r.status === 'สาย' ? (r.late_at || '') : '',
         class_id: r.class_id || null
       }));
+      const round = parseInt(elRound.value, 10);
       try {
         const res = await saveDailyAttendance({
-          subjectId: elSubject.value, date: elDate.value, round: parseInt(elRound.value, 10), records
+          subjectId: elSubject.value, date: elDate.value, round, records
         });
-        showAlert(`✓ ${res.message || 'บันทึกสำเร็จ'} (เพิ่ม ${res.added || 0} • แทนที่ ${res.deleted || 0})`, 'success', 4000);
+        closeConfirmModal();
+        openSuccessModal(round, res.added || records.length);
       } catch (e) {
+        closeConfirmModal();
         showAlert('บันทึก fail: ' + e.message, 'error', 0);
       } finally {
+        ok.disabled = false; ok.innerHTML = '<i class="fas fa-save me-1"></i> บันทึก';
         btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i> บันทึกการเช็คชื่อ';
       }
     };
   </script>
 
   <style>
+    /* ===== ✨ Attendance Modal ===== */
+    .att-modal-bg {
+      position: fixed; inset: 0;
+      background: rgba(15, 23, 42, .55);
+      backdrop-filter: blur(4px);
+      display: none; align-items: center; justify-content: center;
+      z-index: 9999;
+      animation: att-fade-in .2s ease-out;
+      padding: 1rem;
+    }
+    @keyframes att-fade-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes att-slide-up {
+      from { transform: translateY(20px) scale(.96); opacity: 0; }
+      to   { transform: translateY(0)    scale(1);   opacity: 1; }
+    }
+    .att-modal-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 1.5rem 1.5rem 1.25rem;
+      max-width: 480px; width: 100%;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,.4);
+      animation: att-slide-up .25s cubic-bezier(.34,1.56,.64,1);
+    }
+    .att-modal-header {
+      display: flex; gap: .8rem; align-items: flex-start;
+      padding-bottom: .75rem;
+      border-bottom: 1px solid #f1f5f9;
+      margin-bottom: 1rem;
+    }
+    .att-modal-title { font-size: 1.15rem; font-weight: 700; color: #1a237e; }
+    .att-modal-sub   { font-size: .85rem; color: #64748b; margin-top: 2px; }
+    .att-confirm-summary { margin-bottom: 1.25rem; }
+    .att-summary-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: .6rem .85rem; background: #f1f5f9;
+      border-radius: 8px; font-size: .95rem;
+      margin-bottom: .55rem;
+    }
+    .att-summary-row b { color: #1a237e; font-size: 1.05rem; }
+    .att-summary-breakdown {
+      display: flex; flex-wrap: wrap; gap: .4rem;
+      margin-top: .35rem;
+    }
+    .att-chip {
+      display: inline-flex; align-items: center; gap: .35rem;
+      padding: .4rem .7rem;
+      border-radius: 999px;
+      font-size: .85rem; font-weight: 600;
+    }
+    .att-chip b { font-size: .95rem; }
+    .att-modal-actions {
+      display: flex; gap: .5rem; justify-content: flex-end;
+      padding-top: .75rem;
+      border-top: 1px solid #f1f5f9;
+    }
+
+    /* ===== ✅ Success Modal ===== */
+    .att-success-card {
+      text-align: center;
+      padding: 2rem 1.5rem 1.5rem;
+      max-width: 380px;
+    }
+    .att-success-circle {
+      width: 88px; height: 88px; margin: 0 auto .9rem;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 10px 25px rgba(34, 197, 94, .35);
+      animation: att-pop-in .45s cubic-bezier(.34, 1.56, .64, 1);
+    }
+    @keyframes att-pop-in {
+      0%   { transform: scale(0) rotate(-180deg); opacity: 0; }
+      60%  { transform: scale(1.15) rotate(0); opacity: 1; }
+      100% { transform: scale(1) rotate(0); opacity: 1; }
+    }
+    .att-success-circle svg { width: 56px; height: 56px; }
+    .att-check-circle {
+      stroke: rgba(255,255,255,.4); stroke-width: 2;
+    }
+    .att-check-mark {
+      stroke: #fff; stroke-width: 4.5;
+      stroke-linecap: round; stroke-linejoin: round;
+      stroke-dasharray: 48; stroke-dashoffset: 48;
+      animation: att-check-draw .5s .25s cubic-bezier(.65, 0, .45, 1) forwards;
+    }
+    @keyframes att-check-draw { to { stroke-dashoffset: 0; } }
+    .att-success-title {
+      font-size: 1.5rem; font-weight: 800; color: #16a34a;
+      margin-bottom: .35rem;
+      animation: att-fade-in .35s .35s both;
+    }
+    .att-success-sub {
+      font-size: .95rem; color: #64748b;
+      margin-bottom: 1.25rem;
+      animation: att-fade-in .35s .45s both;
+    }
+    .att-success-card .btn { animation: att-fade-in .35s .55s both; }
+
     .student-row {
       display: flex; gap: 12px;
       padding: 12px 16px;
