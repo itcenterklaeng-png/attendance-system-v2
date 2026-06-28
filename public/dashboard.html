@@ -114,7 +114,10 @@
       <table class="table table-hover" style="font-size:.85rem;" id="subj-table">
         <thead style="background:#f0f2f5;">
           <tr>
-            <th>รหัส</th>
+            <th class="text-center" style="width:60px;">ลำดับ</th>
+            <th class="text-center" style="font-size:.75rem;background:#eef2ff;">รอบ 1</th>
+            <th class="text-center" style="font-size:.75rem;background:#fef3c7;">รอบ 2</th>
+            <th class="text-center" style="font-size:.75rem;background:#f0fdf4;">บันทึก<br>หลังสอน</th>
             <th>ชื่อวิชา</th>
             <th>ครูผู้สอน</th>
             <th class="text-end">นร.</th>
@@ -125,9 +128,6 @@
             <th class="text-end" style="color:var(--c-leave-s);">ลากิจ</th>
             <th class="text-end">ยังไม่เช็ค</th>
             <th class="text-end">% มา</th>
-            <th class="text-center" style="font-size:.75rem;">รอบ 1</th>
-            <th class="text-center" style="font-size:.75rem;">รอบ 2</th>
-            <th class="text-center" style="font-size:.75rem;">บันทึก<br>หลังสอน</th>
           </tr>
         </thead>
         <tbody id="subj-tbody">
@@ -636,14 +636,17 @@
       }
       const ok = '<i class="fas fa-check-circle" style="color:#15803d;font-size:1.1rem;"></i>';
       const ng = '<i class="fas fa-times-circle" style="color:#dc2626;font-size:1.1rem;"></i>';
-      tbody.innerHTML = list.map(r => {
+      tbody.innerHTML = list.map((r, i) => {
         const pct = r.pct_present;
         const pctCls = pct == null ? 'text-muted' : pct >= 80 ? 'text-success' : pct >= 60 ? 'text-warning' : 'text-danger';
         const pctTxt = pct == null ? '—' : pct + '%';
         const uncheckedBadge = r.unchecked > 0 ? `<span class="badge bg-warning text-dark">${r.unchecked}</span>` : `<span class="text-muted">0</span>`;
         return `
           <tr style="cursor:pointer;" data-sid="${esc(r.subject_id)}" data-name="${esc(r.subject_name)}">
-            <td><code>${esc(r.subject_id)}</code></td>
+            <td class="text-center"><b>${i + 1}</b></td>
+            <td class="text-center">${r.has_round_1 ? ok : ng}</td>
+            <td class="text-center">${r.has_round_2 ? ok : ng}</td>
+            <td class="text-center">${r.has_teaching_log ? ok : ng}</td>
             <td>${esc(r.subject_name)}</td>
             <td style="font-size:.8rem;color:var(--text-2);">${esc(r.teacher_names || '-')}</td>
             <td class="text-end">${r.enrolled}</td>
@@ -654,9 +657,6 @@
             <td class="text-end" style="color:var(--c-leave-s);">${r.leave_cnt}</td>
             <td class="text-end">${uncheckedBadge}</td>
             <td class="text-end ${pctCls}"><b>${pctTxt}</b></td>
-            <td class="text-center">${r.has_round_1 ? ok : ng}</td>
-            <td class="text-center">${r.has_round_2 ? ok : ng}</td>
-            <td class="text-center">${r.has_teaching_log ? ok : ng}</td>
           </tr>
         `;
       }).join('');

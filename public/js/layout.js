@@ -14,8 +14,9 @@ const MENU = [
   { id: 'reports',              href: 'reports.html',              icon: 'fa-chart-bar',      label: 'รายงานการเช็คชื่อ',     roles: ['admin','user','executive'] },
   { id: 'teaching-log-reports', href: 'teaching-log-reports.html', icon: 'fa-file-alt',       label: 'รายงานบันทึกหลังสอน',   roles: ['admin','user','executive'] },
   { id: 'attendance-status',    href: 'attendance-status.html',    icon: 'fa-tasks',          label: 'ตรวจสอบสถานะเช็คชื่อ',  roles: ['admin','user'] },
-  // ⭐ เมนู admin / executive — อยู่ด้านล่าง
-  { id: 'dashboard',            href: 'dashboard.html',            icon: 'fa-tachometer-alt', label: 'แดชบอร์ด',               roles: ['admin','executive'] },
+  // ⭐ แดชบอร์ด — ครูทุกคนดูได้
+  { id: 'dashboard',            href: 'dashboard.html',            icon: 'fa-tachometer-alt', label: 'แดชบอร์ด',               roles: ['admin','executive','user'] },
+  // ⭐ เมนู admin only
   { id: 'admin',                href: 'admin.html',                icon: 'fa-cog',            label: 'จัดการระบบ',             roles: ['admin'] }
 ];
 
@@ -130,7 +131,7 @@ function injectShell(profile, activeId, opts) {
              : 'ครู';
   const teacherIdLine = profile.teacher_id ? `<div style="font-size:11px;opacity:.7">รหัส: ${escapeHtml(profile.teacher_id)}</div>` : '';
   // ⭐ เมนูแยก 2 กลุ่ม — กลุ่มหลัก vs กลุ่ม admin/executive
-  const ADMIN_ONLY_IDS = new Set(['dashboard', 'admin']);
+  const ADMIN_ONLY_IDS = new Set(['admin']);
   const allowed = MENU.filter(m => m.roles.includes(profile.role));
   const visibleAdminCount = allowed.filter(m => ADMIN_ONLY_IDS.has(m.id)).length;
 
