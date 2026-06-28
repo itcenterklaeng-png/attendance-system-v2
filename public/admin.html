@@ -1528,6 +1528,16 @@
     async function renderUsers() {
       if (ctx.teachers.length === 0) ctx.teachers = await listTeachers({ limit: 500 });
       const users = await listUsers();
+      // ⭐ เรียง: ผู้บริหาร → ครู → admin (รอง: ชื่อ → email)
+      const roleRank = { executive: 1, user: 2, admin: 3 };
+      users.sort((a, b) => {
+        const ra = roleRank[a.role] ?? 9;
+        const rb = roleRank[b.role] ?? 9;
+        if (ra !== rb) return ra - rb;
+        const na = (a.teachers?.full_name || a.full_name || a.email || '').toString();
+        const nb = (b.teachers?.full_name || b.full_name || b.email || '').toString();
+        return na.localeCompare(nb, 'th');
+      });
       const teachOpts = ctx.teachers.map(t => `<option value="${esc(t.teacher_id)}">${esc(t.teacher_id)} — ${esc(t.full_name)}</option>`).join('');
 
       document.getElementById('admin-content').innerHTML = `
