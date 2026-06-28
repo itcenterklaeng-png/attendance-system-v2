@@ -115,11 +115,9 @@
         <thead style="background:#f0f2f5;">
           <tr>
             <th class="text-center" style="width:60px;">ลำดับ</th>
-            <th class="text-center" style="font-size:.75rem;background:#eef2ff;">รอบ 1</th>
-            <th class="text-center" style="font-size:.75rem;background:#fef3c7;">รอบ 2</th>
-            <th class="text-center" style="font-size:.75rem;background:#f0fdf4;">บันทึก<br>หลังสอน</th>
             <th>ชื่อวิชา</th>
             <th>ครูผู้สอน</th>
+            <th style="font-size:.85rem;">สาขา/ห้อง</th>
             <th class="text-end">นร.</th>
             <th class="text-end" style="color:var(--c-present);">มา</th>
             <th class="text-end" style="color:var(--c-absent);">ขาด</th>
@@ -128,10 +126,13 @@
             <th class="text-end" style="color:var(--c-leave-s);">ลากิจ</th>
             <th class="text-end">ยังไม่เช็ค</th>
             <th class="text-end">% มา</th>
+            <th class="text-center" style="font-size:.75rem;background:#eef2ff;">รอบ 1</th>
+            <th class="text-center" style="font-size:.75rem;background:#fef3c7;">รอบ 2</th>
+            <th class="text-center" style="font-size:.75rem;background:#f0fdf4;">บันทึก<br>หลังสอน</th>
           </tr>
         </thead>
         <tbody id="subj-tbody">
-          <tr><td colspan="14" style="text-align:center;padding:1.5rem;"><div class="spinner" style="margin:0 auto;"></div></td></tr>
+          <tr><td colspan="15" style="text-align:center;padding:1.5rem;"><div class="spinner" style="margin:0 auto;"></div></td></tr>
         </tbody>
       </table>
     </div>
@@ -277,6 +278,45 @@
     let ttRound = null;          // top teachers round filter (null = both)
     let lastSummary = null;      // cache for re-rendering
 
+    // ⭐ สร้าง map subject_id → "สาขา ระดับ.ปี/ห้อง"
+    // ใช้ pagination เผื่อ enrollments เกิน 1000 rows
+    async function loadSubjectClassMap() {
+      const map = {};   // subject_id → Set(label)
+      const PAGE = 1000;
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from('enrollments')
+          .select('subject_id, classes(major, level, year, room)')
+          .range(from, from + PAGE - 1);
+        if (error) break;
+        if (!data || data.length === 0) break;
+        for (const r of data) {
+          if (!r.classes) continue;
+          const c = r.classes;
+          const major = (c.major || '').trim();
+          const lvl = (c.level || '').trim();
+          const yr  = (c.year || '').toString().trim();
+          const rm  = (c.room || '').toString().trim();
+          let lbl = major;
+          let cls = lvl;
+          if (yr) cls += (cls ? '.' : '') + yr;
+          if (rm) cls += '/' + rm;
+          const full = [major, cls].filter(Boolean).join(' ');
+          if (full) {
+            if (!map[r.subject_id]) map[r.subject_id] = new Set();
+            map[r.subject_id].add(full);
+          }
+        }
+        if (data.length < PAGE) break;
+      }
+      // แปลง Set → string
+      const out = {};
+      Object.keys(map).forEach(sid => {
+        out[sid] = Array.from(map[sid]).sort().join(', ');
+      });
+      return out;
+    }
+
     async function loadAll() {
       const d = elDate.value;
       const r = parseInt(elRound.value, 10);
@@ -286,14 +326,17 @@
       document.getElementById('dash-backdate').style.display = d < todayISO() ? '' : 'none';
 
       try {
-        const [summary, subjects, top, topT, trend] = await Promise.all([
+        const [summary, subjects, top, topT, trend, classMap] = await Promise.all([
           getDashboardSummary(d, r),
           getDashboardSubjects(d, r),
           getTopAbsentees({ limit: 30 }),
           getTopTeachersToday(d, ttRound, 20),
-          getTrend7Days(d, r)
+          getTrend7Days(d, r),
+          loadSubjectClassMap()
         ]);
         lastSummary = summary;
+        // merge class label เข้าใน subjects
+        subjects.forEach(s => { s.class_label = classMap[s.subject_id] || ''; });
         currentSubjects = subjects;
         const s = applyModeToSummary(summary);
         renderHero(s);
@@ -631,7 +674,7 @@
       document.getElementById('subj-count').textContent = list.length + ' วิชา';
       const tbody = document.getElementById('subj-tbody');
       if (list.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="14" class="text-muted" style="text-align:center;padding:1rem;">ไม่มีวิชาเช็คชื่อในวันนี้</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="15" class="text-muted" style="text-align:center;padding:1rem;">ไม่มีวิชาเช็คชื่อในวันนี้</td></tr>`;
         return;
       }
       const ok = '<i class="fas fa-check-circle" style="color:#15803d;font-size:1.1rem;"></i>';
@@ -644,11 +687,9 @@
         return `
           <tr style="cursor:pointer;" data-sid="${esc(r.subject_id)}" data-name="${esc(r.subject_name)}">
             <td class="text-center"><b>${i + 1}</b></td>
-            <td class="text-center">${r.has_round_1 ? ok : ng}</td>
-            <td class="text-center">${r.has_round_2 ? ok : ng}</td>
-            <td class="text-center">${r.has_teaching_log ? ok : ng}</td>
             <td>${esc(r.subject_name)}</td>
             <td style="font-size:.8rem;color:var(--text-2);">${esc(r.teacher_names || '-')}</td>
+            <td style="font-size:.82rem;color:#3949ab;font-weight:600;">${esc(r.class_label || '-')}</td>
             <td class="text-end">${r.enrolled}</td>
             <td class="text-end" style="color:var(--c-present);font-weight:600;">${r.present}</td>
             <td class="text-end" style="color:var(--c-absent);">${r.absent}</td>
@@ -657,6 +698,9 @@
             <td class="text-end" style="color:var(--c-leave-s);">${r.leave_cnt}</td>
             <td class="text-end">${uncheckedBadge}</td>
             <td class="text-end ${pctCls}"><b>${pctTxt}</b></td>
+            <td class="text-center">${r.has_round_1 ? ok : ng}</td>
+            <td class="text-center">${r.has_round_2 ? ok : ng}</td>
+            <td class="text-center">${r.has_teaching_log ? ok : ng}</td>
           </tr>
         `;
       }).join('');
