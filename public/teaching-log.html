@@ -172,6 +172,10 @@
     const elList    = document.getElementById('log-list');
     const modalBg   = document.getElementById('modal-bg');
     let editingId = null, currentLogs = [];
+    // ⭐ ย้ายขึ้นมาประกาศก่อน — เพราะ openModal() อาจถูกเรียกจาก URL params (auto-open) ก่อนถึง line ที่เคยประกาศไว้
+    let currentImageUrl = null;     // URL ของรูปที่บันทึก
+    let pendingBlob = null;
+    let pendingDataUrl = null;
 
     // default = 30 วันย้อนหลัง
     const today = new Date();
@@ -269,9 +273,7 @@
     }
 
     // ===== Image handling — upload เข้า Supabase Storage =====
-    let currentImageUrl = null;     // URL ของรูปที่บันทึก (เก่า หรือใหม่ที่อัพโหลดแล้ว)
-    let pendingBlob = null;         // Blob ใหม่ที่ยังไม่ได้อัพโหลด
-    let pendingDataUrl = null;      // base64 สำหรับ preview ก่อนอัพโหลด
+    // (currentImageUrl, pendingBlob, pendingDataUrl — ประกาศไว้ด้านบนแล้ว)
 
     document.getElementById('m-image-input').addEventListener('change', async (e) => {
       const file = e.target.files[0];
