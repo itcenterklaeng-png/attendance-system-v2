@@ -564,6 +564,18 @@ export async function updateUserRole(userId, patch) {
 }
 
 /**
+ * ดึงสถานะการเช็คชื่อ/บันทึกหลังสอนของครู — สำหรับเมนู "ตรวจสอบสถานะ"
+ *   → คืน [{ subjectId, subjectName, totalDates, attendedR1Count, ..., dates: [...] }]
+ */
+export async function getCheckStatusForTeacher(teacherId) {
+  const { data, error } = await supabase.rpc('get_check_status_for_teacher', {
+    p_teacher_id: teacherId
+  });
+  if (error) throw error;
+  return data || [];
+}
+
+/**
  * Reset password ของ user คนอื่น (admin only)
  *   → เรียก Vercel serverless function /api/admin/reset-password
  *   → backend ตรวจ JWT + role=admin ก่อน reset

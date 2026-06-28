@@ -9,6 +9,7 @@ const LOGO_URL = 'https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DL
 // เมนูทั้งหมด — กรองตาม role ตอน render (เอา "หน้าแรก" ออก — เช็คชื่อเป็นหน้าหลัก)
 const MENU = [
   { id: 'attendance',     href: 'attendance.html',           icon: 'fa-clipboard-check',label: 'เช็คชื่อนักเรียน',   roles: ['admin','user'] },
+  { id: 'attendance-status', href: 'attendance-status.html',  icon: 'fa-tasks',          label: 'ตรวจสอบสถานะเช็คชื่อ', roles: ['admin','user'] },
   { id: 'reports',        href: 'reports.html',              icon: 'fa-chart-bar',      label: 'รายงานเช็คชื่อ',     roles: ['admin','user','executive'] },
   { id: 'teaching-log-reports', href: 'teaching-log-reports.html', icon: 'fa-file-alt', label: 'รายงานบันทึกหลังสอน', roles: ['admin','user','executive'] },
   { id: 'dashboard',      href: 'dashboard.html',            icon: 'fa-tachometer-alt', label: 'แดชบอร์ด',           roles: ['admin','executive'] },

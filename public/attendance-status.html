@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#1a237e" />
+  <title>ตรวจสอบสถานะการเช็คชื่อ — ระบบเช็คชื่อนักเรียน</title>
+  <link rel="icon" href="https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DLEchopSbfi&sz=w128" />
+  <link rel="stylesheet" href="css/app.css" />
+  <style>
+    .cs-card {
+      border: 1px solid var(--border, #e5e7eb);
+      border-radius: 10px;
+      margin-bottom: .6rem;
+      background: #fff;
+      overflow: hidden;
+    }
+    .cs-header {
+      padding: .85rem 1rem;
+      cursor: pointer;
+      display: flex; align-items: center; gap: .6rem;
+      flex-wrap: wrap;
+      background: #fafafa;
+      transition: background .15s;
+    }
+    .cs-header:hover { background: #f3f4f6; }
+    .cs-header.is-open { background: #eef2ff; }
+    .cs-name { flex: 1; min-width: 180px; color: #1a237e; font-weight: 700; }
+    .cs-summary { color: var(--text-2, #475569); font-size: .82rem; }
+    .cs-table-wrap { padding: .5rem .75rem; background: #fff; }
+    .cs-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+    .cs-table th { padding: .55rem .65rem; font-weight: 700; }
+    .cs-table th.col-r1 { background: #eef2ff; }
+    .cs-table th.col-r2 { background: #fef3c7; }
+    .cs-table th.col-tl { background: #f0fdf4; }
+    .cs-table td { padding: .55rem .65rem; border-top: 1px solid #f1f5f9; }
+    .cs-table .t-center { text-align: center; }
+    .cs-link-done {
+      color: #15803d; font-weight: 600; text-decoration: none; cursor: pointer;
+      display: inline-flex; align-items: center; gap: .3rem;
+    }
+    .cs-link-done:hover { text-decoration: underline; }
+    .cs-link-todo {
+      color: #b91c1c; font-weight: 600; text-decoration: underline; cursor: pointer;
+      display: inline-flex; align-items: center; gap: .3rem;
+    }
+    .cs-link-locked { color: #94a3b8; font-style: italic; font-size: .85rem; }
+    .cs-badge-ok    { background: #dcfce7; color: #16a34a; padding: .25rem .65rem; border-radius: 999px; font-size: .8rem; font-weight: 600; }
+    .cs-badge-warn  { background: #fef3c7; color: #b45309; padding: .25rem .65rem; border-radius: 999px; font-size: .8rem; font-weight: 600; }
+    @media (max-width: 640px) {
+      .cs-summary { width: 100%; order: 3; }
+      .cs-table { font-size: .85rem; }
+      .cs-table th, .cs-table td { padding: .4rem .45rem; }
+    }
+  </style>
+</head>
+<body>
+  <div id="alert-area"></div>
+
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">
+      <div class="card-title" style="margin:0;">
+        <i class="fas fa-tasks me-1"></i> ตรวจสอบสถานะการเช็คชื่อ
+      </div>
+      <div class="flex-1" style="flex:1;"></div>
+      <button class="btn btn-secondary btn-sm" id="btn-refresh" title="โหลดใหม่">
+        <i class="fas fa-sync-alt me-1"></i> รีเฟรช
+      </button>
+    </div>
+
+    <div class="text-muted" style="margin-bottom:.75rem;font-size:.88rem;">
+      คลิกที่ชื่อวิชาเพื่อดูรายวัน — ถ้ายัง<b style="color:#b91c1c;">ไม่ได้เช็ค</b> /
+      <b style="color:#b91c1c;">ไม่ได้บันทึก</b> คลิกที่ลิงก์เพื่อดำเนินการได้ทันที
+    </div>
+
+    <div id="cs-list">
+      <div class="empty-state"><div class="spinner" style="margin:0 auto 1rem;"></div><p>กำลังโหลด...</p></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth } from './js/auth.js';
+    import { initLayout } from './js/layout.js';
+    import { getCheckStatusForTeacher } from './js/api.js';
+    import { showAlert, esc } from './js/utils.js';
+
+    const profile = await requireAuth();
+    if (!profile) throw new Error('not authed');
+    initLayout(profile, 'attendance-status', { title: 'ตรวจสอบสถานะการเช็คชื่อ', icon: 'fa-tasks' });
+
+    const tid = profile.teacher_id;
+    if (!tid) {
+      document.getElementById('cs-list').innerHTML =
+        '<div class="empty-state"><div class="empty-icon">⚠️</div><p>บัญชีนี้ไม่ได้ผูกกับครู — ไม่สามารถดูสถานะได้</p></div>';
+      throw new Error('no teacher_id');
+    }
+
+    const state = { data: [], expanded: {} };
+
+    function fmtThai(ymd) {
+      if (!ymd || typeof ymd !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(ymd)) return ymd || '';
+      const [y, m, d] = ymd.split('T')[0].split('-');
+      const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+      return `${parseInt(d,10)} ${months[parseInt(m,10)-1]} ${(parseInt(y,10)+543)%100}`;
+    }
+
+    function cellDone(label, href) {
+      return `<a href="${href}" class="cs-link-done" title="คลิกเพื่อแก้ไข">
+        <i class="fas fa-check-circle"></i> ${label}
+        <span style="font-size:.72rem;color:#6b7280;text-decoration:underline;">(แก้ไข)</span>
+      </a>`;
+    }
+    function cellTodo(label, href) {
+      return `<a href="${href}" class="cs-link-todo" title="คลิกเพื่อดำเนินการ">
+        <i class="fas fa-times-circle"></i> ${label}
+      </a>`;
+    }
+
+    function render() {
+      const list = document.getElementById('cs-list');
+      const data = state.data;
+      if (data.length === 0) {
+        list.innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div><p>ยังไม่มีวิชาที่มีตารางสอน</p></div>`;
+        return;
+      }
+
+      list.innerHTML = data.map(s => {
+        const sid = String(s.subjectId);
+        const isOpen = !!state.expanded[sid];
+        const total = s.totalDates || 0;
+        const r1 = s.attendedR1Count || 0;
+        const r2 = s.attendedR2Count || 0;
+        const tl = s.teachingLogCount || 0;
+        const remainR1 = total - r1;
+        const remainTL = total - tl;
+        const maxRemain = Math.max(remainR1, remainTL);
+        const badge = maxRemain === 0
+          ? `<span class="cs-badge-ok">✅ ครบทุกวัน</span>`
+          : `<span class="cs-badge-warn">⚠️ ค้าง ${maxRemain} วัน</span>`;
+
+        let body = '';
+        if (isOpen && Array.isArray(s.dates) && s.dates.length > 0) {
+          const rows = s.dates.map((d, i) => {
+            const ymd = (d.date || '').slice(0, 10);
+            const r1Href = `attendance-check.html?subject=${encodeURIComponent(sid)}&date=${ymd}&round=1`;
+            const r2Href = `attendance-check.html?subject=${encodeURIComponent(sid)}&date=${ymd}&round=2`;
+            const tlHref = `teaching-log.html?subject=${encodeURIComponent(sid)}&date=${ymd}`;
+
+            const r1Cell = d.hasAttendanceR1
+              ? cellDone('เช็คแล้ว', r1Href)
+              : cellTodo('ยังไม่เช็ค — คลิกเพื่อเช็ค', r1Href);
+            const r2Cell = !d.hasAttendanceR1
+              ? `<span class="cs-link-locked">🔒 ต้องเช็ครอบ 1 ก่อน</span>`
+              : (d.hasAttendanceR2
+                  ? cellDone('เช็คแล้ว', r2Href)
+                  : cellTodo('ยังไม่เช็ค — คลิกเพื่อเช็ค', r2Href));
+            const tlCell = d.hasTeachingLog
+              ? cellDone('บันทึกแล้ว', tlHref)
+              : cellTodo('ยังไม่บันทึก — คลิกเพื่อบันทึก', tlHref);
+
+            return `<tr>
+              <td class="t-center">${i + 1}</td>
+              <td>${fmtThai(ymd)}</td>
+              <td class="t-center">${r1Cell}</td>
+              <td class="t-center">${r2Cell}</td>
+              <td class="t-center">${tlCell}</td>
+            </tr>`;
+          }).join('');
+
+          body = `<div class="cs-table-wrap">
+            <table class="cs-table">
+              <thead style="background:#f0f2f5;">
+                <tr>
+                  <th class="t-center" style="width:60px;">ลำดับ</th>
+                  <th>วันเดือนปี</th>
+                  <th class="t-center col-r1">🌅 รอบ 1</th>
+                  <th class="t-center col-r2">🔁 รอบ 2</th>
+                  <th class="t-center col-tl">📝 บันทึกหลังสอน</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+            <div class="text-muted" style="font-size:.78rem;margin-top:.4rem;">
+              💡 คลิกที่สถานะใดๆ เพื่อเข้าไปเช็ค/แก้ไข
+            </div>
+          </div>`;
+        } else if (isOpen) {
+          body = `<div class="text-muted" style="padding:.85rem 1rem;">— ยังไม่มีตารางสอนของวิชานี้ —</div>`;
+        }
+
+        return `
+          <div class="cs-card">
+            <div class="cs-header ${isOpen ? 'is-open' : ''}" data-sid="${esc(sid)}">
+              <i class="fas fa-${isOpen ? 'chevron-down' : 'chevron-right'}" style="color:#6b7280;width:14px;"></i>
+              <i class="fas fa-book" style="color:#94a3b8;"></i>
+              <span class="cs-name">${esc(s.subjectName)}${s.major ? ` <span style="color:#6b7280;font-weight:400;font-size:.85rem;">· ${esc(s.major)}</span>` : ''}</span>
+              <span class="cs-summary">
+                📅 ${total} วัน · 🌅 ${r1}/${total} · 🔁 ${r2}/${total} · 📝 ${tl}/${total}
+              </span>
+              ${badge}
+            </div>
+            ${body}
+          </div>
+        `;
+      }).join('');
+
+      list.querySelectorAll('.cs-header').forEach(h => {
+        h.onclick = () => {
+          const sid = h.dataset.sid;
+          state.expanded[sid] = !state.expanded[sid];
+          render();
+        };
+      });
+    }
+
+    async function load() {
+      const list = document.getElementById('cs-list');
+      list.innerHTML = `<div class="empty-state"><div class="spinner" style="margin:0 auto 1rem;"></div><p>กำลังโหลด...</p></div>`;
+      try {
+        state.data = await getCheckStatusForTeacher(tid);
+        // natural sort by subject_id (ถ้ารหัสเป็นเลข)
+        state.data.sort((a, b) =>
+          String(a.subjectId || '').localeCompare(String(b.subjectId || ''), undefined, { numeric: true, sensitivity: 'base' })
+        );
+        render();
+      } catch (e) {
+        list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><p>โหลดไม่สำเร็จ: ${esc(e.message)}</p></div>`;
+      }
+    }
+
+    document.getElementById('btn-refresh').onclick = load;
+    await load();
+  </script>
+</body>
+</html>
