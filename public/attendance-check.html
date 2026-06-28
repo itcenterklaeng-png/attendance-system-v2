@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#1a237e" />
+  <title>เช็คชื่อนักเรียน — บันทึก</title>
+  <link rel="icon" href="https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DLEchopSbfi&sz=w128" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div id="alert-area"></div>
+
+  <div class="card">
+    <div class="card-header" style="flex-wrap:wrap;gap:.75rem;">
+      <div class="flex-1 text-center">
+        <div class="card-title" id="att-subject-name">📋 เช็คชื่อนักเรียน</div>
+        <div class="card-subtitle" id="att-subject-meta"></div>
+      </div>
+    </div>
+
+    <div class="row g-2" style="margin-top:.5rem;">
+      <div class="col-12 col-md-6 col-lg-4">
+        <label class="form-label fw-bold" for="sel-subject">วิชา</label>
+        <select id="sel-subject" class="form-control form-select"><option>กำลังโหลด...</option></select>
+      </div>
+      <div class="col-12 col-md-6 col-lg-4">
+        <label class="form-label fw-bold" for="sel-class">ห้องเรียน</label>
+        <select id="sel-class" class="form-control form-select"><option value="">ทุกห้อง</option></select>
+      </div>
+      <div class="col-6 col-md-4 col-lg-2">
+        <label class="form-label fw-bold" for="sel-date">
+          <i class="fas fa-calendar-day me-1"></i> วันที่
+        </label>
+        <input type="date" id="sel-date" class="form-control" />
+      </div>
+      <div class="col-6 col-md-4 col-lg-2">
+        <label class="form-label fw-bold" for="sel-round">รอบ</label>
+        <select id="sel-round" class="form-control form-select">
+          <option value="1">รอบ 1 (เข้าเรียน)</option>
+          <option value="2">รอบ 2 (ออกท้ายคาบ)</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="schedule-hint" style="margin-top:.5rem; font-size:.9rem;"></div>
+
+    <div style="margin-top:.75rem;">
+      <button class="btn btn-secondary" id="btn-load" title="โหลดรายชื่อใหม่">
+        <i class="fas fa-sync-alt me-1"></i> รีเฟรช
+      </button>
+    </div>
+  </div>
+
+  <div class="card" id="quick-actions" style="display:none">
+    <div class="flex gap-2" style="flex-wrap: wrap;">
+      <button class="btn btn-success" id="btn-all-present">
+        <i class="fas fa-check-double me-1"></i> ทุกคน "มา"
+      </button>
+      <button class="btn btn-secondary" id="btn-clear">
+        <i class="fas fa-eraser me-1"></i> ล้างที่เลือก
+      </button>
+      <a class="btn btn-outline-primary" id="btn-go-log" href="#">
+        <i class="fas fa-edit me-1"></i> บันทึกหลังสอน
+      </a>
+      <div class="flex-1 text-right" style="align-self: center; color: var(--text-2);">
+        เลือกแล้ว <b id="cnt-checked">0</b> / <b id="cnt-total">0</b>
+      </div>
+    </div>
+    <div style="margin-top:.55rem;padding:.5rem .75rem;background:var(--c-present-bg);border:1px solid #c8e6c9;border-radius:.4rem;color:var(--c-present);font-size:.85rem;">
+      <i class="fas fa-info-circle me-1"></i>
+      ค่าเริ่มต้น = ไม่ได้เลือก — กดสถานะของแต่ละคน หรือ "ทุกคน มา" เพื่อ pre-fill
+    </div>
+  </div>
+
+  <div id="list-card" style="display:none">
+    <div id="students-list" class="student-list"></div>
+
+    <div style="position: sticky; bottom: 1rem; z-index: 10; margin-top: 1rem;">
+      <button class="btn btn-primary btn-lg btn-block" id="btn-save">
+        <i class="fas fa-save me-1"></i> บันทึกการเช็คชื่อ
+      </button>
+    </div>
+    <div style="height:2rem;"></div>
+  </div>
+
+  <script type="module">
+    import { requireAuth } from './js/auth.js';
+    import { initLayout } from './js/layout.js';
+    import { getMySubjects, getClassesOfSubject, getStudentsByDay, saveDailyAttendance, getSubjectSchedule } from './js/api.js';
+    import { supabase } from './js/supabase-client.js';
+    import { showAlert, todayISO, formatThaiDate, esc } from './js/utils.js';
+
+    const profile = await requireAuth();
+    if (!profile) throw new Error('not authed');
+    initLayout(profile, 'attendance', { title: 'เช็คชื่อนักเรียน', icon: 'fa-clipboard-check' });
+
+    const STATUSES = [
+      { code: 'มา',     cls: 'present', label: 'มา' },
+      { code: 'ขาด',    cls: 'absent',  label: 'ขาด' },
+      { code: 'สาย',    cls: 'late',    label: 'สาย' },
+      { code: 'ลาป่วย', cls: 'leave-p', label: 'ลาป่วย' },
+      { code: 'ลากิจ',  cls: 'leave-s', label: 'ลากิจ' }
+    ];
+
+    let currentRecords = new Map();
+    let currentStudents = [];
+    let autoLoadReady = false;     // ⭐ ป้องกัน auto-load ตอน boot ก่อน subjects ยังไม่พร้อม
+
+    const elSubject = document.getElementById('sel-subject');
+    const elClass   = document.getElementById('sel-class');
+    const elDate    = document.getElementById('sel-date');
+    const elRound   = document.getElementById('sel-round');
+    const elList    = document.getElementById('students-list');
+    const elHint    = document.getElementById('schedule-hint');
+    const elListCard= document.getElementById('list-card');
+    const elQuick   = document.getElementById('quick-actions');
+    elDate.value = todayISO();
+
+    // ⭐ รับ params จาก URL — รวมทั้ง round + date
+    const urlParams = new URLSearchParams(location.search);
+    const wantedSubject = urlParams.get('subject');
+    const wantedRound   = urlParams.get('round');
+    const wantedDate    = urlParams.get('date');
+    if (wantedRound && (wantedRound === '1' || wantedRound === '2')) elRound.value = wantedRound;
+    if (wantedDate)  elDate.value = wantedDate;
+
+    // load subjects
+    try {
+      let subjects;
+      if (profile.role === 'admin') {
+        const { data, error } = await supabase
+          .from('subjects')
+          .select('subject_id, subject_name, major, course_type')
+          .order('subject_id');
+        if (error) throw error;
+        subjects = data || [];
+      } else {
+        subjects = await getMySubjects(profile.teacher_id);
+      }
+      if (subjects.length === 0) {
+        elSubject.innerHTML = '<option>(ไม่มีวิชา)</option>';
+      } else {
+        elSubject.innerHTML = subjects.map(s =>
+          `<option value="${esc(s.subject_id)}">${esc(s.subject_id)} — ${esc(s.subject_name)}</option>`
+        ).join('');
+        if (wantedSubject) elSubject.value = wantedSubject;
+        await onSubjectChange();
+        // ⭐ Auto-load รายชื่อทันทีถ้ามีวิชา (ผู้ใช้คลิกเข้ามาจากปุ่ม "เช็คชื่อรอบ 1/2")
+        autoLoadReady = true;
+        await loadStudents();
+      }
+    } catch (e) {
+      showAlert('โหลดวิชา fail: ' + e.message, 'error', 0);
+    }
+
+    // ⭐ Auto-load เมื่อเปลี่ยน control ใด ๆ
+    elSubject.addEventListener('change', async () => {
+      await onSubjectChange();
+      if (autoLoadReady) await loadStudents();
+    });
+    elClass.addEventListener('change', () => { if (autoLoadReady) loadStudents(); });
+    elDate.addEventListener('change', async () => {
+      await refreshHint();
+      if (autoLoadReady) await loadStudents();
+    });
+    elRound.addEventListener('change', () => { if (autoLoadReady) loadStudents(); });
+
+    async function onSubjectChange() {
+      const sid = elSubject.value;
+      if (!sid) return;
+      // ชื่อวิชาที่เลือก
+      const optText = elSubject.options[elSubject.selectedIndex]?.text || sid;
+      document.getElementById('att-subject-name').textContent = '📋 ' + optText;
+      document.getElementById('btn-go-log').href = `teaching-log.html?subject=${encodeURIComponent(sid)}`;
+
+      try {
+        const classes = await getClassesOfSubject(sid);
+        elClass.innerHTML = '<option value="">ทุกห้อง</option>' +
+          classes.map(c =>
+            `<option value="${esc(c.class_id)}">${esc(c.class_id)} (${esc(c.major)} ${esc(c.level)}ปี${esc(c.year)}/${esc(c.room)})</option>`
+          ).join('');
+      } catch (e) {
+        showAlert('โหลดห้องเรียน fail: ' + e.message, 'error', 0);
+      }
+      await refreshHint();
+    }
+
+    async function refreshHint() {
+      const sid = elSubject.value;
+      const d = elDate.value;
+      if (!sid || !d) { elHint.innerHTML = ''; return; }
+      try {
+        const periods = await getSubjectSchedule(sid, d);
+        if (periods) {
+          elHint.innerHTML = `<div style="padding:.65rem .85rem;background:#e3f2fd;color:#0d47a1;border:1px solid #90caf9;border-radius:.5rem;font-size:.9rem;">
+            <i class="fas fa-calendar-day me-1"></i> ${formatThaiDate(d)} — มีคาบ <b>${esc(periods)}</b>
+          </div>`;
+        } else {
+          elHint.innerHTML = `<div style="padding:.65rem .85rem;background:#fff3cd;color:#856404;border:1px solid #ffeeba;border-radius:.5rem;font-size:.9rem;">
+            <i class="fas fa-exclamation-triangle me-1"></i> ${formatThaiDate(d)} — ไม่มีตารางสอน → จะบันทึกเป็นคาบ 1
+          </div>`;
+        }
+      } catch (e) {
+        elHint.innerHTML = '';
+      }
+    }
+
+    document.getElementById('btn-load').onclick = loadStudents;
+    document.getElementById('btn-all-present').onclick = () => {
+      currentStudents.forEach(s => {
+        currentRecords.set(s.student_id, {
+          status: 'มา', note: currentRecords.get(s.student_id)?.note || '', late_at: '', class_id: s.class_id
+        });
+      });
+      renderList(); updateCounts();
+    };
+    document.getElementById('btn-clear').onclick = () => { currentRecords = new Map(); renderList(); updateCounts(); };
+
+    async function loadStudents() {
+      const sid = elSubject.value;
+      const d   = elDate.value;
+      const round = parseInt(elRound.value, 10);
+      const classId = elClass.value || null;
+      if (!sid || !d) { showAlert('กรุณาเลือกวิชา + วันที่', 'error', 0); return; }
+      elList.innerHTML = '<div class="empty-state"><div class="spinner" style="margin: 0 auto 1rem;"></div><p>กำลังโหลด...</p></div>';
+      elListCard.style.display = '';
+      elQuick.style.display = 'none';
+
+      try {
+        const rows = await getStudentsByDay({ subjectId: sid, date: d, round, classId });
+        currentStudents = rows;
+        currentRecords = new Map();
+        rows.forEach(r => {
+          if (r.status) currentRecords.set(r.student_id, { status: r.status, note: r.note || '', late_at: r.late_at || '', class_id: r.class_id });
+        });
+        renderList();
+        elQuick.style.display = '';
+        updateCounts();
+
+        const filled = rows.filter(r => r.status).length;
+        if (rows.length === 0) showAlert('ไม่มีนักเรียนที่ enroll ในวิชานี้', 'warn', 0);
+        else if (filled > 0) showAlert(`โหลด ${rows.length} คน • มีข้อมูลเดิม ${filled} คน`, 'info', 3000);
+        else showAlert(`โหลด ${rows.length} คน — ยังไม่ได้เช็ค`, 'info', 2500);
+      } catch (e) {
+        elList.innerHTML = ''; elListCard.style.display = 'none';
+        showAlert('โหลด fail: ' + e.message, 'error', 0);
+      }
+    }
+
+    function renderList() {
+      if (currentStudents.length === 0) {
+        elList.innerHTML = '<div class="empty-state"><i class="fas fa-user-slash" style="font-size:2rem;color:var(--text-3);"></i><p>ไม่มีนักเรียน</p></div>';
+        return;
+      }
+      elList.innerHTML = currentStudents.map(s => {
+        const r = currentRecords.get(s.student_id);
+        const cur = r?.status || '';
+        const note = esc(r?.note || '');
+        const lateAt = esc(r?.late_at || '');
+        return `
+          <div class="student-row" data-sid="${esc(s.student_id)}">
+            <div style="flex:1; min-width:0;">
+              <div style="font-weight:600;">${esc(s.full_name)}</div>
+              <div style="font-size:.78rem;color:var(--text-3);">
+                <code>${esc(s.student_id)}</code> · ห้อง <code>${esc(s.class_id || '-')}</code>
+              </div>
+            </div>
+            <div class="status-buttons" style="display:flex;gap:4px;flex-wrap:wrap;">
+              ${STATUSES.map(st => `
+                <button type="button" class="btn-status ${cur === st.code ? 'active ' + st.cls : ''}"
+                        data-st="${st.code}" data-cls="${st.cls}">${st.label}</button>
+              `).join('')}
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;min-width:160px;">
+              <input type="text" class="form-control form-control-sm note-input" placeholder="หมายเหตุ" value="${note}" />
+              <input type="time" class="form-control form-control-sm late-input" value="${lateAt}"
+                     style="display: ${cur === 'สาย' ? 'block' : 'none'};" />
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      elList.querySelectorAll('.student-row').forEach(row => {
+        const sid = row.dataset.sid;
+        const noteEl = row.querySelector('.note-input');
+        const lateEl = row.querySelector('.late-input');
+
+        row.querySelectorAll('.btn-status').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const st = btn.dataset.st;
+            const cur = currentRecords.get(sid);
+            if (cur?.status === st) {
+              currentRecords.delete(sid);
+              row.querySelectorAll('.btn-status').forEach(b => { b.className = 'btn-status'; });
+              lateEl.style.display = 'none';
+            } else {
+              const stu = currentStudents.find(s => s.student_id === sid);
+              currentRecords.set(sid, {
+                status: st, note: noteEl.value, late_at: lateEl.value, class_id: stu?.class_id
+              });
+              row.querySelectorAll('.btn-status').forEach(b => {
+                b.className = 'btn-status' + (b === btn ? ' active ' + btn.dataset.cls : '');
+              });
+              lateEl.style.display = (st === 'สาย') ? 'block' : 'none';
+            }
+            updateCounts();
+          });
+        });
+        noteEl.addEventListener('input', () => { const c = currentRecords.get(sid); if (c) c.note = noteEl.value; });
+        lateEl.addEventListener('input', () => { const c = currentRecords.get(sid); if (c) c.late_at = lateEl.value; });
+      });
+    }
+
+    function updateCounts() {
+      document.getElementById('cnt-checked').textContent = currentRecords.size;
+      document.getElementById('cnt-total').textContent = currentStudents.length;
+    }
+
+    document.getElementById('btn-save').onclick = async () => {
+      if (currentRecords.size === 0) { showAlert('ยังไม่ได้เลือกสถานะ', 'error', 0); return; }
+      if (!confirm(`บันทึกเช็คชื่อ ${currentRecords.size} คน?`)) return;
+      const btn = document.getElementById('btn-save');
+      btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> กำลังบันทึก...';
+      const records = [];
+      currentRecords.forEach((r, sid) => records.push({
+        student_id: sid, status: r.status, note: r.note || '',
+        late_at: r.status === 'สาย' ? (r.late_at || '') : '',
+        class_id: r.class_id || null
+      }));
+      try {
+        const res = await saveDailyAttendance({
+          subjectId: elSubject.value, date: elDate.value, round: parseInt(elRound.value, 10), records
+        });
+        showAlert(`✓ ${res.message || 'บันทึกสำเร็จ'} (เพิ่ม ${res.added || 0} • แทนที่ ${res.deleted || 0})`, 'success', 4000);
+      } catch (e) {
+        showAlert('บันทึก fail: ' + e.message, 'error', 0);
+      } finally {
+        btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i> บันทึกการเช็คชื่อ';
+      }
+    };
+  </script>
+
+  <style>
+    .student-row {
+      display: flex; gap: 12px;
+      padding: 12px 16px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .btn-status {
+      padding: 5px 10px;
+      border: 2px solid var(--border-2);
+      background: #fff;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--text-2);
+    }
+    .btn-status:hover { border-color: var(--plight); }
+    .btn-status.active { color: #fff; }
+    .btn-status.active.present  { background: var(--c-present); border-color: var(--c-present); }
+    .btn-status.active.absent   { background: var(--c-absent);  border-color: var(--c-absent); }
+    .btn-status.active.late     { background: var(--c-late);    border-color: var(--c-late); }
+    .btn-status.active.leave-p  { background: var(--c-leave-p); border-color: var(--c-leave-p); }
+    .btn-status.active.leave-s  { background: var(--c-leave-s); border-color: var(--c-leave-s); }
+  </style>
+</body>
+</html>

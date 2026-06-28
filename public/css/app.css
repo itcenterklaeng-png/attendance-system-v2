@@ -1,0 +1,2814 @@
+
+/* =======================================================
+   ระบบเช็คชื่อนักเรียน - วิทยาลัยการอาชีพแกลง
+   Design: Navy + Gold (เหมือนระบบเช็คชื่อเข้าแถว)
+   ======================================================= */
+
+:root {
+  /* สีหลัก - น้ำเงินเข้ม */
+  --primary:    #1a237e;
+  --plight:     #3949ab;
+  --pdark:      #0d1657;
+  --pgrad:      linear-gradient(135deg, #1a237e 0%, #3949ab 100%);
+  --pgrad-sb:   linear-gradient(180deg, #0d1657 0%, #1a237e 60%, #3949ab 100%);
+
+  /* สีเน้น - ทอง */
+  --gold:       #ffd600;
+  --gold-soft:  rgba(255,214,0,.15);
+
+  /* สถานะเช็คชื่อ */
+  --c-present:  #2e7d32;  --c-present-bg:  #e8f5e9;
+  --c-absent:   #c62828;  --c-absent-bg:   #ffebee;
+  --c-late:     #e65100;  --c-late-bg:     #fff3e0;
+  --c-leave-p:  #283593;  --c-leave-p-bg:  #e8eaf6;
+  --c-leave-s:  #880e4f;  --c-leave-s-bg:  #fce4ec;
+  --c-leave:    #1565c0;  --c-leave-bg:    #e3f2fd;
+
+  /* สีรอง */
+  --success:    #2e7d32;  --success-bg: #e8f5e9;
+  --danger:     #c62828;  --danger-bg:  #ffebee;
+  --warning:    #e65100;  --warning-bg: #fff3e0;
+  --info:       #1565c0;  --info-bg:    #e3f2fd;
+
+  /* ระดับเทา */
+  --bg:       #f0f2f5;
+  --card:     #ffffff;
+  --border:   #e8eaf6;
+  --border-2: #c5cae9;
+  --text:     #263238;
+  --text-2:   #546e7a;
+  --text-3:   #90a4ae;
+  --muted:    #bdbdbd;
+
+  /* Spacing */
+  --sw:     260px;
+  --hh:     56px;
+  --r-sm:   8px;
+  --r-md:   11px;
+  --r-lg:   13px;
+  --r-xl:   16px;
+  --r-pill: 999px;
+
+  /* Shadows */
+  --sh-sm:  0 2px 8px rgba(0,0,0,.06);
+  --sh-md:  0 4px 15px rgba(0,0,0,.08);
+  --sh-lg:  0 8px 30px rgba(0,0,0,.15);
+  --sh-nav: 0 4px 15px rgba(26,35,126,.3);
+
+  /* Legacy aliases */
+  --gray-50:  #fafbff;
+  --gray-100: #f0f2f5;
+  --gray-200: #e8eaf6;
+  --gray-300: #c5cae9;
+  --gray-400: #9fa8da;
+  --gray-500: #90a4ae;
+  --gray-600: #546e7a;
+  --gray-700: #37474f;
+  --gray-800: #263238;
+  --accent:   #1a237e;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  font-family: 'Sarabun', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+a { color: var(--plight); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* =========== LOADING OVERLAY =========== */
+.loading-overlay {
+  position: fixed; inset: 0;
+  background: rgba(26,35,126,.93);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  z-index: 9999; color: #fff;
+}
+.spinner {
+  width: 50px; height: 50px;
+  border: 5px solid rgba(255,255,255,.2);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin .85s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { margin-top: 1rem; font-size: 14px; opacity: .85; }
+
+/* =========== SIDEBAR + TOPBAR LAYOUT =========== */
+#sidebar-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.5);
+  z-index: 98;
+}
+#sidebar-overlay.show { display: block; }
+
+#sidebar {
+  width: var(--sw);
+  min-height: 100vh;
+  background: var(--pgrad-sb);
+  position: fixed; top: 0; left: 0;
+  z-index: 99;
+  display: flex; flex-direction: column;
+  transition: transform .25s ease;
+}
+.sidebar-brand {
+  padding: 16px 14px;
+  text-align: center;
+  border-bottom: 1px solid rgba(255,255,255,.1);
+}
+.brand-icon {
+  width: 52px; height: 52px;
+  background: var(--gold-soft);
+  border: 2px solid rgba(255,214,0,.5);
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  margin-bottom: 6px;
+  font-size: 24px;
+}
+.brand-icon i { color: var(--gold); font-size: 24px; }
+.brand-icon span { color: var(--gold); font-size: 26px; }
+.sidebar-brand h6 {
+  color: #fff; margin: 0;
+  font-weight: 700; font-size: 13px;
+  line-height: 1.4;
+}
+.sidebar-brand small {
+  color: rgba(255,255,255,.5);
+  font-size: 10.5px;
+}
+.sidebar-nav {
+  padding: 8px 0;
+  flex: 1;
+  overflow-y: auto;
+}
+.nav-section {
+  padding: 10px 18px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255,255,255,.4);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.nav-btn {
+  display: flex; align-items: center;
+  gap: 10px;
+  padding: 11px 18px;
+  color: rgba(255,255,255,.75);
+  border: none; background: none;
+  width: 100%; text-align: left;
+  font-family: inherit;
+  font-size: 13.5px; font-weight: 500;
+  cursor: pointer;
+  transition: all .18s;
+  border-left: 3px solid transparent;
+}
+.nav-btn:hover {
+  background: rgba(255,255,255,.07);
+  color: #fff;
+}
+.nav-btn.active {
+  background: rgba(255,255,255,.14);
+  color: #fff;
+  border-left-color: var(--gold);
+  font-weight: 600;
+}
+.nav-btn i {
+  width: 18px; text-align: center; font-size: 14px;
+}
+.sidebar-footer {
+  padding: 12px;
+  border-top: 1px solid rgba(255,255,255,.1);
+}
+.user-info {
+  display: flex; align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 9px;
+  background: rgba(255,255,255,.07);
+}
+.user-avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--gold-soft);
+  border: 2px solid rgba(255,214,0,.5);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--gold);
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.user-name {
+  color: #fff; font-size: 12.5px;
+  font-weight: 600; line-height: 1.2;
+}
+.user-role {
+  color: rgba(255,255,255,.55);
+  font-size: 10.5px; margin-top: 2px;
+}
+.btn-foot {
+  display: flex; align-items: center; justify-content: center;
+  gap: 6px;
+  background: rgba(255,255,255,.07);
+  color: rgba(255,255,255,.72);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px; font-weight: 600;
+  margin-top: 6px; width: 100%;
+  cursor: pointer;
+  transition: all .18s;
+  font-family: inherit;
+}
+.btn-foot:hover {
+  background: rgba(255,255,255,.14);
+  color: #fff;
+}
+.btn-foot.danger:hover {
+  background: rgba(198,40,40,.45);
+  color: #fff;
+}
+
+/* Main content */
+#main-content,
+.main-content {
+  margin-left: var(--sw);
+  min-height: 100vh;
+  display: flex; flex-direction: column;
+  transition: margin .25s ease;
+}
+
+/* Topbar */
+.topbar {
+  background: #fff;
+  height: var(--hh);
+  padding: 0 18px;
+  display: flex; align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  position: sticky; top: 0; z-index: 50;
+}
+.page-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--primary);
+  margin: 0;
+  display: flex; align-items: center;
+  gap: 8px;
+}
+.btn-hamburger {
+  display: none;
+  background: none; border: none;
+  color: var(--primary);
+  font-size: 20px; cursor: pointer;
+  padding: 4px 8px;
+  margin-right: 4px;
+}
+.clock-box {
+  display: flex; flex-direction: column;
+  align-items: flex-end;
+  background: #f5f6fa;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 4px 11px;
+  min-width: 76px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.clock-time {
+  font-size: 15px; font-weight: 700;
+  color: var(--plight);
+  letter-spacing: .5px;
+}
+.clock-sec {
+  font-size: 12px; font-weight: 600;
+  color: #9fa8da;
+  letter-spacing: .5px;
+}
+.clock-date {
+  font-size: 9.5px;
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ===== Active users badge (online) ===== */
+.active-users-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.active-users-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1.5px solid #c8e6c9;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background .15s, border-color .15s;
+  line-height: 1.3;
+}
+.active-users-badge:hover {
+  background: #c8e6c9;
+  border-color: #81c784;
+}
+.active-users-wrap.open .active-users-badge {
+  background: #c8e6c9;
+  border-color: #2e7d32;
+}
+.au-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #2e7d32;
+  box-shadow: 0 0 0 0 rgba(46,125,50,.5);
+  animation: au-pulse 2s infinite;
+  flex: 0 0 auto;
+}
+@keyframes au-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(46,125,50,.5); }
+  70%  { box-shadow: 0 0 0 8px rgba(46,125,50,0); }
+  100% { box-shadow: 0 0 0 0 rgba(46,125,50,0); }
+}
+.au-label { font-weight: 600; }
+.au-count {
+  background: #2e7d32;
+  color: #fff;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.au-popover {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 280px;
+  max-width: 320px;
+  max-height: 360px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.14);
+  z-index: 300;
+  overflow: hidden;
+  flex-direction: column;
+}
+.au-popover.show { display: flex; }
+.au-popover-header {
+  padding: 10px 12px;
+  font-weight: 700;
+  color: var(--primary);
+  background: #f5f6fa;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.au-popover-body {
+  overflow-y: auto;
+  max-height: 300px;
+  padding: 4px 0;
+}
+.au-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #f0f2f5;
+}
+.au-item:last-child { border-bottom: none; }
+.au-item-avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: #5c6bc0;
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700;
+  font-size: 12.5px;
+  flex: 0 0 auto;
+}
+.au-item-info { flex: 1; min-width: 0; }
+.au-item-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #212121;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.au-item-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.au-item-time {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+/* ===== Topbar user display ===== */
+.topbar-user {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 6px;
+  background: #f5f6fa;
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+  user-select: none;
+}
+.topbar-user:hover,
+.topbar-user.open {
+  background: #eceff4;
+  border-color: var(--plight, #3949ab);
+}
+.tu-avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 12.5px;
+  background: #5c6bc0;
+  flex: 0 0 auto;
+}
+.tu-avatar-admin    { background: #1a237e; }
+.tu-avatar-executive{ background: #ffb300; color:#1a237e; }
+.tu-avatar-user     { background: #00796b; }
+.tu-info {
+  display: flex; flex-direction: column;
+  line-height: 1.15;
+  min-width: 0;
+}
+.tu-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #212121;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tu-role { font-size: 10.5px; line-height: 1; }
+.tu-caret {
+  font-size: 10px;
+  color: #90a4ae;
+  margin-left: 2px;
+  transition: transform .2s;
+}
+.topbar-user.open .tu-caret { transform: rotate(180deg); }
+
+.role-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #e0e0e0;
+  color: #424242;
+  line-height: 1.4;
+}
+.role-badge-admin {
+  background: #1a237e;
+  color: #ffd600;
+}
+.role-badge-executive {
+  background: #ffd600;
+  color: #1a237e;
+}
+.role-badge-user {
+  background: #00796b;
+  color: #fff;
+}
+
+.tu-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 200px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.12);
+  padding: 6px;
+  z-index: 300;
+}
+.tu-menu-item {
+  display: flex; align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  color: #212121;
+  text-align: left;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.tu-menu-item:hover { background: #f5f6fa; }
+.tu-menu-item.danger { color: #c62828; }
+.tu-menu-item.danger:hover { background: #ffebee; }
+.tu-menu-item i { width: 14px; text-align: center; }
+
+/* Bottom Nav (mobile) */
+#bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 200;
+  background: #fff;
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -3px 12px rgba(0,0,0,.1);
+}
+.bnav-wrap { display: flex; align-items: stretch; }
+.bnav-btn {
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 8px 4px 10px;
+  border: none; background: none;
+  color: #999;
+  font-size: 10px; font-weight: 600;
+  cursor: pointer;
+  transition: color .2s;
+  gap: 3px;
+  font-family: inherit;
+  min-height: 56px;
+}
+.bnav-btn i { font-size: 18px; }
+.bnav-btn.active { color: var(--primary); }
+.bnav-btn.active i { color: var(--primary); }
+
+/* =========== CONTENT =========== */
+.content-area {
+  padding: 16px;
+  flex: 1;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* =========== CARDS =========== */
+.card {
+  background: var(--card);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  box-shadow: var(--sh-sm);
+  margin-bottom: 14px;
+}
+.card-header {
+  display: flex; align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--primary);
+  margin: 0;
+}
+.card-subtitle {
+  font-size: 12.5px;
+  color: var(--text-2);
+  margin-top: 3px;
+}
+
+.chart-card {
+  background: #fff;
+  border-radius: var(--r-lg);
+  padding: 16px;
+  box-shadow: var(--sh-sm);
+  height: 100%;
+}
+.chart-card h6 {
+  font-weight: 700;
+  color: var(--primary);
+  margin: 0 0 12px 0;
+  font-size: 13.5px;
+}
+
+.table-card {
+  background: #fff;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  box-shadow: var(--sh-sm);
+  margin-bottom: 14px;
+}
+.table-header {
+  padding: 12px 16px;
+  display: flex; align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.table-header h6 {
+  font-weight: 700;
+  color: var(--primary);
+  margin: 0;
+  font-size: 13.5px;
+}
+
+/* =========== BUTTONS =========== */
+.btn {
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-family: inherit;
+  font-size: 13px; font-weight: 600;
+  border: none; border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: all .2s;
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--text);
+  background: #fff;
+  border: 1.5px solid var(--border);
+}
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+
+.btn-primary, .btn-prim {
+  background: var(--pgrad);
+  color: #fff;
+  border: none;
+}
+.btn-primary:hover, .btn-prim:hover {
+  opacity: .92; transform: translateY(-1px); color: #fff;
+  box-shadow: 0 6px 20px rgba(26,35,126,.35);
+}
+
+.btn-success, .btn-succ {
+  background: linear-gradient(135deg, #1b5e20, #2e7d32);
+  color: #fff; border: none;
+}
+.btn-success:hover, .btn-succ:hover {
+  opacity: .92; color: #fff;
+  box-shadow: 0 6px 18px rgba(46,125,50,.3);
+}
+
+.btn-danger, .btn-pdf {
+  background: linear-gradient(135deg, #b71c1c, #e53935);
+  color: #fff; border: none;
+}
+.btn-danger:hover, .btn-pdf:hover {
+  opacity: .92; color: #fff;
+  box-shadow: 0 6px 18px rgba(229,57,53,.3);
+}
+
+.btn-warning {
+  background: linear-gradient(135deg, #e65100, #fb8c00);
+  color: #fff; border: none;
+}
+.btn-warning:hover { opacity: .92; color: #fff; }
+
+.btn-secondary {
+  background: linear-gradient(135deg, #37474f, #546e7a);
+  color: #fff; border: none;
+}
+.btn-secondary:hover { opacity: .92; color: #fff; }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-2);
+  border: 1.5px solid var(--border);
+}
+.btn-ghost:hover { background: var(--border); color: var(--primary); }
+
+.btn-link {
+  background: transparent; color: var(--plight);
+  padding: 6px 10px; border: none;
+}
+.btn-link:hover { text-decoration: underline; background: rgba(57,73,171,.06); }
+
+.btn-sm { font-size: 12px; padding: 6px 12px; }
+.btn-lg { font-size: 15px; padding: 11px 22px; }
+.btn-block { width: 100%; }
+
+/* =========== FORM CONTROLS =========== */
+.form-group { margin-bottom: 14px; }
+.form-group label,
+.form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.form-control {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: #fff;
+  border: 1.5px solid var(--border-2);
+  border-radius: var(--r-sm);
+  transition: border-color .15s, box-shadow .15s;
+}
+.form-control:focus {
+  outline: none;
+  border-color: var(--plight);
+  box-shadow: 0 0 0 3px rgba(57,73,171,.15);
+}
+.form-control:disabled {
+  background: #f5f5f5;
+  color: var(--text-3);
+  cursor: not-allowed;
+}
+select.form-control {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%233949ab' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 34px;
+}
+.input-group {
+  position: relative;
+  display: flex;
+  flex-wrap: nowrap;
+}
+.input-group-text {
+  display: flex; align-items: center;
+  padding: 9px 12px;
+  background: #f8f9fa;
+  border: 1.5px solid var(--border-2);
+  border-right: none;
+  border-radius: var(--r-sm) 0 0 var(--r-sm);
+  color: var(--primary);
+  font-size: 14px;
+}
+.input-group > .form-control {
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  border-left: none;
+}
+
+/* =========== FILTER BAR =========== */
+.filter-bar {
+  background: #fff;
+  border-radius: var(--r-md);
+  padding: 12px 16px;
+  box-shadow: var(--sh-sm);
+  margin-bottom: 14px;
+  display: flex; align-items: flex-end;
+  gap: 10px; flex-wrap: wrap;
+}
+.fg { margin: 0; }
+.fg label {
+  font-size: 11px; font-weight: 700;
+  color: var(--text-2);
+  margin-bottom: 3px;
+  display: block;
+}
+.fg select,
+.fg input[type="date"],
+.fg input[type="text"] {
+  border: 1.5px solid var(--border-2);
+  border-radius: var(--r-sm);
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--text);
+  min-width: 130px;
+  font-family: inherit;
+  background: #fff;
+}
+.fg select:focus, .fg input:focus {
+  outline: none; border-color: var(--plight);
+}
+.fg-full { width: 100%; }
+.search-wrap { position: relative; display: inline-block; }
+.search-wrap i {
+  position: absolute;
+  left: 10px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-3);
+  font-size: 12px;
+}
+.search-input {
+  border: 1.5px solid var(--border-2);
+  border-radius: var(--r-sm);
+  padding: 7px 10px 7px 30px;
+  font-size: 13px;
+  width: 200px;
+  background: #f8f9fa;
+  font-family: inherit;
+}
+.search-input:focus {
+  outline: none; border-color: var(--plight); background: #fff;
+}
+
+/* =========== BADGES =========== */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.badge-มา, .badge-present   { background: var(--c-present-bg); color: var(--c-present); }
+.badge-ขาด, .badge-absent   { background: var(--c-absent-bg);  color: var(--c-absent); }
+.badge-สาย, .badge-late     { background: var(--c-late-bg);    color: var(--c-late); }
+.badge-ลา,  .badge-leave    { background: var(--c-leave-bg);   color: var(--c-leave); }
+.badge-ลากิจ   { background: var(--c-leave-p-bg); color: var(--c-leave-p); }
+.badge-ลาป่วย  { background: var(--c-leave-s-bg); color: var(--c-leave-s); }
+.badge-admin      { background: #ede7f6; color: #4527a0; }
+.badge-user       { background: #e0f7fa; color: #006064; }
+.badge-executive  { background: #fff8e1; color: #ff6f00; }
+.badge-success { background: var(--success-bg); color: var(--success); }
+.badge-danger  { background: var(--danger-bg);  color: var(--danger); }
+.badge-warning { background: var(--warning-bg); color: var(--warning); }
+.badge-info    { background: var(--info-bg);    color: var(--info); }
+.badge-gray    { background: #eceff1; color: #546e7a; }
+/* V2.7.K: Bootstrap-compat aliases used by admin tables */
+.badge-primary   { background: #e8eaf6; color: var(--primary); }
+.badge-secondary { background: #eceff1; color: #546e7a; }
+/* V2.7.L: success flash บนปุ่ม Save หลังบันทึกเสร็จ */
+.btn.btn-saved-flash {
+  background: var(--success) !important;
+  border-color: var(--success) !important;
+  color: #fff !important;
+  transition: background .2s ease;
+}
+
+.dept-badge {
+  background: #fce4ec;
+  color: #880e4f;
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.room-badge {
+  background: var(--border);
+  color: var(--plight);
+  border-radius: 7px;
+  padding: 2px 9px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+/* =========== STAT CARDS =========== */
+.stat-card {
+  background: #fff;
+  border-radius: var(--r-lg);
+  padding: 14px;
+  box-shadow: var(--sh-sm);
+  display: flex; align-items: center;
+  gap: 12px;
+  transition: transform .2s, box-shadow .2s;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--sh-md);
+}
+.stat-icon {
+  width: 48px; height: 48px;
+  border-radius: var(--r-md);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+  background: var(--border);
+  color: var(--plight);
+}
+.stat-icon.success { background: var(--success-bg); color: var(--success); }
+.stat-icon.danger  { background: var(--danger-bg);  color: var(--danger); }
+.stat-icon.warning { background: var(--warning-bg); color: var(--warning); }
+.stat-icon.info    { background: var(--info-bg);    color: var(--info); }
+.stat-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--primary);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.stat-label {
+  font-size: 11.5px;
+  color: var(--text-2);
+  margin-top: 3px;
+  font-weight: 500;
+}
+.stat-sub {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 1px;
+}
+.stat-card-click { cursor: pointer; }
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.overall-card {
+  background: var(--pgrad);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  color: #fff;
+  box-shadow: var(--sh-nav);
+}
+.overall-card .oc-label { font-size: 11px; opacity: .75; margin-bottom: 4px; }
+.overall-card .oc-val {
+  font-size: 28px; font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.overall-card .oc-sub { font-size: 11px; opacity: .6; margin-top: 3px; }
+
+/* =========== TABLES =========== */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+table.table, .table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0;
+  font-size: 13px;
+}
+.table thead th {
+  background: #f8f9ff;
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 12px;
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+.table tbody td {
+  padding: 9px 12px;
+  font-size: 13px;
+  vertical-align: middle;
+  /* V2.7.M: เส้นปะเล็ก ๆ คั่นระหว่างแถว — สีเทาอ่อน เห็นชัดแต่ไม่รบกวนสายตา */
+  border-bottom: 1px dashed #d0d7e2;
+  color: var(--text);
+  background: #ffffff;
+}
+.table tbody tr:hover td { background: #f5f7ff; }
+.table tbody tr:last-child td { border-bottom: none; }
+
+/* =========== ATTENDANCE STATUS BUTTONS =========== */
+.att-btn {
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  border: 2px solid;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+  background: transparent;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.att-btn[data-s="มา"]     { border-color: var(--c-present);  color: var(--c-present); }
+.att-btn[data-s="มา"].sel { background: var(--c-present);    color: #fff; }
+.att-btn[data-s="ขาด"]    { border-color: var(--c-absent);   color: var(--c-absent); }
+.att-btn[data-s="ขาด"].sel{ background: var(--c-absent);     color: #fff; }
+.att-btn[data-s="สาย"]    { border-color: var(--c-late);     color: var(--c-late); }
+.att-btn[data-s="สาย"].sel{ background: var(--c-late);       color: #fff; }
+.att-btn[data-s="ลา"]     { border-color: var(--c-leave);    color: var(--c-leave); }
+.att-btn[data-s="ลา"].sel { background: var(--c-leave);      color: #fff; }
+.att-btn[data-s="ลากิจ"]  { border-color: var(--c-leave-p);  color: var(--c-leave-p); }
+.att-btn[data-s="ลากิจ"].sel{ background: var(--c-leave-p);  color: #fff; }
+.att-btn[data-s="ลาป่วย"] { border-color: var(--c-leave-s);  color: var(--c-leave-s); }
+.att-btn[data-s="ลาป่วย"].sel{ background: var(--c-leave-s); color: #fff; }
+
+.status-btn {
+  padding: 3px 10px;                 /* V2.7.U: บางลง */
+  border: 1.5px solid;
+  border-radius: var(--r-pill);
+  background: transparent;
+  font-size: 11.5px;
+  line-height: 1.25;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+  font-family: inherit;
+  min-height: 26px;
+}
+.status-btn[data-status="มา"], .status-btn.present  { border-color: var(--c-present); color: var(--c-present); }
+.status-btn[data-status="มา"].active, .status-btn.present.active { background: var(--c-present); color: #fff; }
+.status-btn[data-status="ขาด"], .status-btn.absent  { border-color: var(--c-absent); color: var(--c-absent); }
+.status-btn[data-status="ขาด"].active, .status-btn.absent.active { background: var(--c-absent); color: #fff; }
+.status-btn[data-status="สาย"], .status-btn.late    { border-color: var(--c-late); color: var(--c-late); }
+.status-btn[data-status="สาย"].active, .status-btn.late.active   { background: var(--c-late); color: #fff; }
+.status-btn[data-status="ลา"],  .status-btn.leave   { border-color: var(--c-leave); color: var(--c-leave); }
+.status-btn[data-status="ลา"].active, .status-btn.leave.active   { background: var(--c-leave); color: #fff; }
+/* V2.7.T: ลาป่วย (sick) / ลากิจ (personal) */
+.status-btn[data-status="ลาป่วย"], .status-btn.sick     { border-color: var(--c-leave-s); color: var(--c-leave-s); }
+.status-btn[data-status="ลาป่วย"].active, .status-btn.sick.active     { background: var(--c-leave-s); color: #fff; }
+.status-btn[data-status="ลากิจ"],  .status-btn.personal { border-color: var(--c-leave-p); color: var(--c-leave-p); }
+.status-btn[data-status="ลากิจ"].active, .status-btn.personal.active  { background: var(--c-leave-p); color: #fff; }
+
+/* V2.7.T: badge สำหรับ "ตั้งค่าเริ่มต้น" (เขียวอ่อน) */
+/* V2.7.U: ขนาดบางลง */
+.status-badge--default {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 7px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 600; line-height: 1.3;
+  background: #f1f8e9; color: #558b2f; border: 1px solid #c5e1a5;
+}
+
+/* V2.7.W: chip "เวลามาสาย" — โทน slate-blue ที่สบายตา (low saturation) */
+.late-stamp-wrap { display: inline-flex; align-items: center; }
+.late-stamp {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px; font-weight: 600; line-height: 1.3;
+  background: #f1f5f9;          /* slate-100 */
+  color: #475569;                /* slate-600 */
+  border: 1px solid #cbd5e1;     /* slate-300 */
+  font-variant-numeric: tabular-nums;
+}
+.late-stamp i { font-size: 10px; opacity: .8; }
+
+/* V2.7.T: หมายเหตุการเช็คชื่อ */
+/* V2.7.U: ลดความสูง — เปลี่ยนเป็น inline ขนาดเล็ก */
+.att-note-wrap { flex: 1; min-width: 140px; }
+.att-note {
+  font-size: 11.5px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px dashed #cbd5e1;
+  background: #fafbff;
+  width: 100%;
+  max-width: 320px;
+  height: 26px;
+  line-height: 1.2;
+  transition: border-color .15s, background .15s;
+}
+.att-note:focus {
+  border-style: solid;
+  border-color: var(--primary, #1976d2);
+  background: #fff;
+  outline: none;
+}
+.att-note.has-note {
+  border-style: solid;
+  border-color: #ffb300;
+  background: #fff8e1;
+}
+
+/* V2.6: Grouped student tree (สาขาวิชา > ระดับ > ชั้นปี) */
+.stu-tree { display: flex; flex-direction: column; gap: .5rem; }
+.stu-major > summary {
+  list-style: none;
+  display: flex; align-items: center; gap: .5rem;
+  background: linear-gradient(135deg, #e3f2fd 0%, #f5f9ff 100%);
+  border-left: 4px solid var(--primary-500, #1976d2);
+  border-radius: .5rem;
+  transition: background .15s;
+}
+.stu-major > summary:hover { background: #e3f2fd; }
+.stu-major > summary::-webkit-details-marker { display: none; }
+.stu-major > summary::before {
+  content: "▸"; font-size: 1rem; color: var(--primary-600, #0d47a1);
+  transition: transform .15s; display: inline-block;
+}
+.stu-major[open] > summary::before { transform: rotate(90deg); }
+
+.stu-level {
+  margin: .5rem 0 .5rem 1rem;
+  padding: .5rem .75rem;
+  border-left: 3px dashed #90caf9;
+}
+.stu-level > summary {
+  list-style: none; cursor: pointer; padding: .25rem 0;
+  display: flex; align-items: center; gap: .4rem;
+}
+.stu-level > summary::-webkit-details-marker { display: none; }
+.stu-level > summary::before {
+  content: "▸"; color: #64b5f6; display: inline-block;
+  transition: transform .15s;
+}
+.stu-level[open] > summary::before { transform: rotate(90deg); }
+
+.stu-year-list {
+  display: flex; flex-direction: column; gap: .35rem;
+  margin: .35rem 0 .25rem 1.25rem;
+}
+.stu-year-row {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .5rem .75rem;
+  background: #fff;
+  border: 1px solid var(--gray-200, #e5e7eb);
+  border-radius: .5rem;
+  cursor: pointer;
+  transition: all .15s;
+}
+.stu-year-row:hover {
+  background: #f5f9ff;
+  border-color: var(--primary-400, #42a5f5);
+  transform: translateX(2px);
+}
+.stu-count-badge {
+  margin-left: auto;
+  background: var(--primary-500, #1976d2);
+  color: #fff;
+  font-size: .8rem;
+  font-weight: 600;
+  padding: .15rem .65rem;
+  border-radius: 999px;
+}
+
+/* V2.7.S: ระดับชั้นปี + กลุ่ม */
+.stu-year-head {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .35rem .25rem .15rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.stu-group-list {
+  display: flex; flex-direction: column; gap: .3rem;
+  margin: 0 0 .5rem 1.25rem;
+}
+.stu-group-row {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .45rem .75rem;
+  background: #fff;
+  border: 1px dashed var(--gray-200, #e5e7eb);
+  border-radius: .5rem;
+  cursor: pointer;
+  transition: all .15s;
+}
+.stu-group-row:hover {
+  background: #f5f9ff;
+  border-color: var(--primary-400, #42a5f5);
+  border-style: solid;
+  transform: translateX(2px);
+}
+
+/* V2.5: Status badges (checked / pending / mixed) in student row */
+/* V2.7.U: ขนาดบางลง */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  font-size: 10.5px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  line-height: 1.3;
+  margin-top: 0;
+}
+.status-badge--done {
+  background: #e8f5e9;
+  color: #1b5e20;
+  border-color: #a5d6a7;
+}
+.status-badge--pending {
+  background: #fff3cd;
+  color: #856404;
+  border-color: #ffeeba;
+}
+.status-badge--mixed {
+  background: #ffe0b2;
+  color: #e65100;
+  border-color: #ffb74d;
+}
+
+/* =========== SUM CHIP / DASH TAB =========== */
+.sum-chip {
+  border-radius: var(--r-pill);
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.dash-tab {
+  border: 2px solid var(--border-2);
+  background: #fff;
+  color: #5c6bc0;
+  border-radius: var(--r-sm);
+  padding: 7px 16px;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: all .2s;
+  font-family: inherit;
+}
+.dash-tab:hover { background: var(--border); border-color: #7986cb; }
+.dash-tab.active {
+  background: var(--pgrad);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 3px 10px rgba(26,35,126,.3);
+}
+
+/* =========== TABS (Admin) =========== */
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.tab {
+  background: transparent;
+  border: none;
+  padding: 10px 16px;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  white-space: nowrap;
+  transition: all .15s;
+}
+.tab:hover { color: var(--primary); background: rgba(57,73,171,.05); }
+.tab.active { color: var(--primary); border-bottom-color: var(--gold); }
+
+/* ===== Admin tabs: per-tab theme colors ===== */
+.tabs-admin .tab {
+  --tab-color: #546e7a;
+  color: #90a4ae;
+}
+.tabs-admin .tab-teachers    { --tab-color: #ff6f00; }
+.tabs-admin .tab-students    { --tab-color: #43a047; }
+.tabs-admin .tab-subjects    { --tab-color: #1e88e5; }
+.tabs-admin .tab-classes     { --tab-color: #8e24aa; }
+.tabs-admin .tab-enrollments { --tab-color: #e91e63; }
+.tabs-admin .tab-users       { --tab-color: #6d4c41; }
+.tabs-admin .tab-logs        { --tab-color: #455a64; }
+
+.tabs-admin .tab:hover {
+  color: var(--tab-color);
+  background: color-mix(in srgb, var(--tab-color) 8%, transparent);
+}
+.tabs-admin .tab.active {
+  color: var(--tab-color);
+  border-bottom-color: var(--tab-color);
+  background: color-mix(in srgb, var(--tab-color) 10%, transparent);
+  font-weight: 700;
+}
+
+/* Fallback สำหรับ browser เก่าที่ไม่รองรับ color-mix */
+@supports not (background: color-mix(in srgb, red 10%, transparent)) {
+  .tabs-admin .tab-teachers:hover    { background: rgba(255,111,0,.08);  }
+  .tabs-admin .tab-teachers.active   { background: rgba(255,111,0,.10);  }
+  .tabs-admin .tab-students:hover    { background: rgba(67,160,71,.08);  }
+  .tabs-admin .tab-students.active   { background: rgba(67,160,71,.10);  }
+  .tabs-admin .tab-subjects:hover    { background: rgba(30,136,229,.08); }
+  .tabs-admin .tab-subjects.active   { background: rgba(30,136,229,.10); }
+  .tabs-admin .tab-classes:hover     { background: rgba(142,36,170,.08); }
+  .tabs-admin .tab-classes.active    { background: rgba(142,36,170,.10); }
+  .tabs-admin .tab-enrollments:hover { background: rgba(233,30,99,.08);  }
+  .tabs-admin .tab-enrollments.active{ background: rgba(233,30,99,.10);  }
+  .tabs-admin .tab-users:hover       { background: rgba(109,76,65,.08);  }
+  .tabs-admin .tab-users.active      { background: rgba(109,76,65,.10);  }
+  .tabs-admin .tab-logs:hover        { background: rgba(69,90,100,.08);  }
+  .tabs-admin .tab-logs.active       { background: rgba(69,90,100,.10);  }
+}
+
+/* =========== SUBJECT / CLASS CARD =========== */
+.subject-card, .class-card {
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all .2s;
+  position: relative;
+  overflow: hidden;
+}
+.subject-card:hover, .class-card:hover {
+  border-color: var(--plight);
+  box-shadow: var(--sh-md);
+  transform: translateY(-1px);
+}
+.subject-card::before, .class-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 4px;
+  background: var(--plight);
+}
+.subject-card.checked::before { background: var(--success); }
+.subject-card.checked { background: var(--gray-50); }
+.subject-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.subject-card-name {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--primary);
+}
+.subject-card-meta {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 3px;
+}
+.class-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+/* =========== STUDENT LIST =========== */
+.student-list {
+  display: flex; flex-direction: column;
+  gap: 4px;            /* V2.7.U: บางที่สุด */
+  margin-bottom: 10px;
+}
+.student-row {
+  background: #fff;
+  border: 1px solid var(--border);   /* V2.7.U: 1px แทน 1.5px */
+  border-radius: var(--r-sm, 6px);
+  padding: 4px 10px;                 /* V2.7.U: บางมาก */
+  display: flex; align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  transition: border-color .15s;
+  min-height: 36px;                  /* V2.7.U: คุมความสูงต่ำสุด */
+}
+.student-row:hover { border-color: var(--border-2); }
+.student-avatar {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: var(--border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--plight);
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.student-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.student-name {
+  font-size: 13px;                    /* V2.7.U: บางลง */
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 0 auto;
+  max-width: 220px;
+}
+/* V2.7.V: เลขที่หน้าชื่อ */
+.student-seq {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 26px;
+  padding: 1px 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3, #6b7280);
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+}
+.student-id {
+  font-size: 12px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.student-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* =========== TEACHER NOTICE =========== */
+.teacher-notice {
+  background: linear-gradient(135deg, #fff8e1, #fffde7);
+  border: 1.5px solid var(--gold);
+  border-radius: var(--r-md);
+  padding: 11px 15px;
+  margin-bottom: 12px;
+  display: flex; align-items: center;
+  gap: 10px;
+}
+.teacher-notice i {
+  color: var(--warning);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.teacher-notice span {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+}
+.teacher-notice strong { color: var(--warning); }
+
+/* =========== ERROR BOX =========== */
+.err-box {
+  background: var(--danger-bg);
+  border: 1.5px solid #ef9a9a;
+  border-radius: var(--r-sm);
+  padding: 11px 14px;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  display: flex; align-items: center;
+  gap: 8px;
+}
+.err-box i { color: var(--danger); }
+
+/* =========== EMPTY STATE =========== */
+.empty-state, .no-data {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-3);
+}
+.empty-state i, .no-data i {
+  font-size: 40px;
+  margin-bottom: 10px;
+  display: block;
+  color: #cfd8dc;
+}
+.empty-state p { margin: 4px 0; font-size: 13px; }
+.empty-icon {
+  font-size: 42px;
+  margin-bottom: 8px;
+  opacity: .5;
+}
+
+/* =========== TOAST =========== */
+.toast-container {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 10000;
+  display: flex; flex-direction: column;
+  gap: 8px;
+  max-width: 380px;
+}
+.toast {
+  border-radius: var(--r-sm);
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 13px;
+  box-shadow: var(--sh-md);
+  animation: toast-slide .3s ease;
+  color: var(--text);
+  background: #fff;
+  border-left: 4px solid var(--plight);
+  min-width: 260px;
+}
+.toast.success { border-left-color: var(--success); background: linear-gradient(90deg, #f1f8e9, #fff); }
+.toast.error, .toast.danger {
+  border-left-color: var(--danger);
+  background: linear-gradient(90deg, #ffebee, #fff);
+  color: var(--danger);
+}
+.toast.warning {
+  border-left-color: var(--warning);
+  background: linear-gradient(90deg, #fff3e0, #fff);
+  color: var(--warning);
+}
+.toast.info { border-left-color: var(--info); background: linear-gradient(90deg, #e3f2fd, #fff); }
+@keyframes toast-slide {
+  from { transform: translateX(100px); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+
+/* =========== MODAL =========== */
+/* V2.7.D: ใช้ค่า positioning explicit + !important เพื่อ override Bootstrap's
+ *         .modal / .modal-dialog / .modal-backdrop ที่ถูก preload จาก CDN
+ *         (Bootstrap 5.3 ตั้ง .modal{position:fixed;top:0;left:0} ทำให้ popup
+ *          ลอยไปมุมซ้ายแทนที่จะอยู่ตรงกลาง) */
+.modal-backdrop {
+  position: fixed !important;
+  top: 0 !important; left: 0 !important;
+  right: 0 !important; bottom: 0 !important;
+  width: 100vw !important; height: 100vh !important;
+  background: rgba(0,0,0,.5) !important;
+  z-index: 1050;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px;
+  animation: modal-fade-in .15s ease;
+  opacity: 1 !important; /* override Bootstrap .modal-backdrop opacity */
+}
+@keyframes modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.modal-dialog {
+  position: relative !important;
+  background: #fff;
+  border-radius: var(--r-lg);
+  max-width: 560px !important;
+  width: 100% !important;
+  max-height: 90vh;
+  margin: 0 !important; /* override Bootstrap .modal-dialog margin auto */
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,.3);
+  animation: modal-pop .2s ease;
+  pointer-events: auto !important; /* override Bootstrap .modal-dialog pointer-events:none */
+}
+@keyframes modal-pop {
+  from { transform: scale(.94); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+.modal-header {
+  background: var(--pgrad);
+  color: #fff;
+  padding: 14px 18px;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
+}
+.modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  color: #fff;
+}
+.modal-close {
+  background: none; border: none;
+  color: #fff; font-size: 20px;
+  cursor: pointer;
+  padding: 0 6px;
+  opacity: .85;
+}
+.modal-close:hover { opacity: 1; }
+.modal-body { padding: 18px; }
+.modal-footer {
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* =========== LOGIN PAGE =========== */
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #1a237e 0%, #0d47a1 50%, #00838f 100%);
+  padding: 16px;
+}
+.login-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 36px 30px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.3);
+}
+.login-logo {
+  text-align: center;
+  margin-bottom: 22px;
+}
+.logo-circle {
+  width: 74px; height: 74px;
+  background: var(--pgrad);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  margin-bottom: 10px;
+  box-shadow: 0 4px 15px rgba(26,35,126,.4);
+  font-size: 32px;
+}
+.logo-circle i, .logo-circle span {
+  font-size: 32px;
+  color: var(--gold);
+}
+.login-title {
+  color: var(--primary);
+  font-weight: 800;
+  font-size: 17px;
+  text-align: center;
+  margin-top: 4px;
+}
+.login-subtitle {
+  color: var(--text-2);
+  text-align: center;
+  font-size: 12.5px;
+  margin-top: 2px;
+  margin-bottom: 20px;
+}
+.btn-login {
+  background: var(--pgrad);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-sm);
+  padding: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  width: 100%;
+  cursor: pointer;
+  transition: all .3s;
+  font-family: inherit;
+  margin-top: 4px;
+}
+.btn-login:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(26,35,126,.4);
+  color: #fff;
+}
+.login-hint {
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 14px;
+}
+
+/* V2.7.AG: เครดิตผู้พัฒนา — login + sidebar */
+.login-credit {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #e5e7eb;
+  text-align: center;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-3, #6b7280);
+}
+.login-credit > div:nth-child(1) { font-size: 11px; opacity: .7; }
+
+.sidebar-credit {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,.12);
+  text-align: center;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: rgba(255,255,255,.6);
+}
+.sidebar-credit > div:nth-child(1) { font-size: 10px; opacity: .7; margin-bottom: 1px; }
+
+/* =========== UTILITIES =========== */
+.text-center  { text-align: center; }
+.text-right   { text-align: right; }
+.text-left    { text-align: left; }
+.text-muted   { color: var(--text-3); }
+.text-danger  { color: var(--danger); }
+.text-success { color: var(--success); }
+.text-primary { color: var(--primary); }
+.flex         { display: flex; }
+.flex-1       { flex: 1; }
+.gap-1        { gap: 4px; }
+.gap-2        { gap: 8px; }
+.gap-3        { gap: 12px; }
+.items-center { align-items: center; }
+.mt-1 { margin-top: 4px; }
+.mt-2 { margin-top: 8px; }
+.mt-3 { margin-top: 12px; }
+.mt-4 { margin-top: 16px; }
+.mb-2 { margin-bottom: 8px; }
+.mb-3 { margin-bottom: 12px; }
+.mb-4 { margin-bottom: 16px; }
+.me-1 { margin-right: 4px; }
+.me-2 { margin-right: 8px; }
+.ms-auto { margin-left: auto; }
+.w-100 { width: 100%; }
+.fw-bold { font-weight: 700; }
+.d-flex { display: flex; }
+.justify-content-between { justify-content: space-between; }
+.justify-content-center  { justify-content: center; }
+.align-items-center { align-items: center; }
+.flex-wrap { flex-wrap: wrap; }
+
+.hidden, [hidden] { display: none !important; }
+
+/* =========== LEGACY / COMPAT CLASSES =========== */
+/* ใช้ร่วมกับ templates/Scripts ที่มีอยู่เดิม */
+
+/* Stat card สำหรับ DashboardPage — ใส่แถบสีด้านซ้ายตามสถานะ */
+.stat-card.success,
+.stat-card.danger,
+.stat-card.warning,
+.stat-card.info {
+  position: relative;
+  padding-left: 18px;
+}
+.stat-card.success::before { background: var(--success); }
+.stat-card.danger::before  { background: var(--danger); }
+.stat-card.warning::before { background: var(--warning); }
+.stat-card.info::before    { background: var(--info); }
+.stat-card.success::before,
+.stat-card.danger::before,
+.stat-card.warning::before,
+.stat-card.info::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 4px;
+  border-radius: var(--r-lg) 0 0 var(--r-lg);
+}
+.stat-info {
+  display: flex; flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* Class card (DashboardPage: status แยกห้อง) */
+.class-card {
+  cursor: default;
+}
+.class-card.green  { border-color: var(--success); }
+.class-card.green::before  { background: var(--success); }
+.class-card.yellow { border-color: var(--warning); }
+.class-card.yellow::before { background: var(--warning); }
+.class-card.red    { border-color: var(--danger); }
+.class-card.red::before    { background: var(--danger); }
+.class-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--border);
+}
+.class-name {
+  font-size: 14px; font-weight: 700;
+  color: var(--primary);
+}
+.class-status-icon {
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.class-subject-list {
+  display: flex; flex-direction: column;
+  gap: 4px;
+}
+.class-subject-item {
+  font-size: 12.5px;
+  color: var(--text-2);
+  display: flex; justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Student row: info + actions block */
+/* V2.7.U: บีบความสูงลง — ชื่อ + badge อยู่บรรทัดเดียว */
+.student-info {
+  flex: 1 1 240px;
+  display: flex; align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  min-width: 200px;
+}
+.student-meta {
+  font-size: 11.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: center;
+}
+.status-buttons {
+  display: flex; gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Table wrapper (เหมือน .table-responsive) */
+.table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--r-md);
+  background: #fff;
+  box-shadow: var(--sh-sm);
+}
+.table-wrapper > .table,
+.table-wrapper > table.table {
+  margin-bottom: 0;
+}
+
+/* Form row (grid 2 columns) */
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 520px) {
+  .form-row { grid-template-columns: 1fr; }
+}
+.form-select {
+  /* alias of .form-control for <select> */
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: #fff;
+  border: 1.5px solid var(--border-2);
+  border-radius: var(--r-sm);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%233949ab' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 34px;
+}
+.form-select:focus {
+  outline: none;
+  border-color: var(--plight);
+  box-shadow: 0 0 0 3px rgba(57,73,171,.15);
+}
+
+/* Modal overlay (alias of modal-backdrop) + .modal (alias of modal-dialog) */
+/* V2.7.D: เหมือน .modal-backdrop ด้านบน — บังคับ centering + override Bootstrap */
+.modal-overlay {
+  position: fixed !important;
+  top: 0 !important; left: 0 !important;
+  right: 0 !important; bottom: 0 !important;
+  width: 100vw !important; height: 100vh !important;
+  background: rgba(0,0,0,.5) !important;
+  z-index: 1050;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px;
+  animation: modal-fade-in .15s ease;
+  opacity: 1 !important;
+  overflow: auto; /* กรณี modal สูงกว่าหน้าจอ ให้ scroll ตรง overlay ได้ */
+}
+.modal {
+  position: relative !important;
+  background: #fff;
+  border-radius: var(--r-lg);
+  max-width: 560px !important;
+  width: 100% !important;
+  max-height: 90vh;
+  margin: auto !important; /* override Bootstrap .modal-dialog margin */
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,.3);
+  animation: modal-pop .2s ease;
+  display: flex !important;
+  flex-direction: column;
+  pointer-events: auto !important;
+  /* override Bootstrap .modal{display:none} */
+  visibility: visible !important;
+}
+.modal > .modal-header {
+  /* already styled */
+}
+
+/* =========== V2.7.G: NICE CONFIRM/ALERT DIALOG =========== */
+/* ใช้กับ confirmDialog() / alertDialog() — แทน confirm()/alert() ของ browser */
+.nice-dialog-overlay {
+  background: rgba(15, 23, 42, .55) !important;
+  backdrop-filter: blur(2px);
+  animation: nice-fade-in .18s ease;
+}
+.nice-dialog-overlay.nice-leaving {
+  animation: nice-fade-out .12s ease forwards;
+}
+@keyframes nice-fade-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes nice-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes nice-pop {
+  from { transform: scale(.88) translateY(8px); opacity: 0; }
+  to   { transform: scale(1)    translateY(0);   opacity: 1; }
+}
+
+.nice-dialog {
+  position: relative;
+  background: #fff;
+  border-radius: 16px;
+  max-width: 420px;
+  width: calc(100% - 32px);
+  padding: 28px 24px 20px;
+  box-shadow: 0 25px 60px rgba(15,23,42,.35), 0 0 0 1px rgba(255,255,255,.05);
+  text-align: center;
+  animation: nice-pop .22s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+.nice-icon {
+  width: 64px; height: 64px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px;
+  position: relative;
+}
+.nice-icon::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  opacity: .25;
+  animation: nice-pulse 1.6s ease-out infinite;
+}
+@keyframes nice-pulse {
+  0%   { transform: scale(.9);  opacity: .35; }
+  70%  { transform: scale(1.15); opacity: 0; }
+  100% { transform: scale(1.15); opacity: 0; }
+}
+
+/* Type variants */
+.nice-danger  .nice-icon          { background: linear-gradient(135deg, #fee2e2, #fecaca); color: #dc2626; }
+.nice-danger  .nice-icon::before  { background: #dc2626; }
+.nice-warning .nice-icon          { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #d97706; }
+.nice-warning .nice-icon::before  { background: #d97706; }
+.nice-info    .nice-icon          { background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: #2563eb; }
+.nice-info    .nice-icon::before  { background: #2563eb; }
+.nice-success .nice-icon          { background: linear-gradient(135deg, #dcfce7, #bbf7d0); color: #16a34a; }
+.nice-success .nice-icon::before  { background: #16a34a; }
+
+.nice-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+.nice-message {
+  font-size: 14.5px;
+  color: #475569;
+  line-height: 1.6;
+  margin-bottom: 22px;
+  word-break: break-word;
+}
+.nice-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.nice-actions .btn {
+  min-width: 100px;
+  padding: 10px 22px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 14.5px;
+  cursor: pointer;
+  border: none;
+  transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
+}
+.nice-actions .btn:hover  { transform: translateY(-1px); filter: brightness(1.05); }
+.nice-actions .btn:active { transform: translateY(0); }
+.nice-actions .btn-secondary { background: #f1f5f9; color: #475569; }
+.nice-actions .btn-secondary:hover { background: #e2e8f0; color: #334155; }
+.nice-actions .btn-primary  { background: linear-gradient(135deg, #3949ab, #1e88e5); color: #fff; box-shadow: 0 4px 12px rgba(57,73,171,.25); }
+.nice-actions .btn-danger   { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; box-shadow: 0 4px 12px rgba(220,38,38,.25); }
+.nice-actions .btn:focus    { outline: 3px solid rgba(57,73,171,.25); outline-offset: 2px; }
+.nice-actions .btn-danger:focus  { outline-color: rgba(220,38,38,.3); }
+
+@media (max-width: 480px) {
+  .nice-dialog { padding: 24px 18px 16px; }
+  .nice-actions .btn { flex: 1; min-width: 0; }
+}
+
+/* V2.7.E: ขนาด modal — ใช้ผ่าน opts.size = 'sm' | 'lg' | 'xl' ใน showModal()
+ *         เพื่อให้ตารางในเนื้อหาพอดี ไม่มี horizontal scrollbar */
+.modal.modal-sm { max-width: 380px !important; }
+.modal.modal-lg { max-width: 900px !important; }
+.modal.modal-xl { max-width: 1140px !important; }
+
+/* compact table ใน modal — ลด padding + ให้ wrap ข้อความได้ ป้องกัน overflow แนวนอน */
+.modal-table-wrapper { width: 100%; }
+.modal-compact-table { font-size: .88rem; }
+.modal-compact-table th,
+.modal-compact-table td {
+  padding: 8px 10px;
+  vertical-align: middle;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.modal-compact-table .btn-sm {
+  padding: 4px 8px;
+  font-size: .8rem;
+}
+
+/* =========== V2.7.J: DASHBOARD CHARTS — donut + trend line =========== */
+.dash-charts-row {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;   /* donut เล็กกว่า trend line นิด */
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.dash-charts-row > .card { margin-bottom: 0; }
+@media (max-width: 900px) {
+  .dash-charts-row { grid-template-columns: 1fr; }
+}
+
+.dash-chart-body {
+  padding: .5rem .25rem .25rem;
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Donut: canvas ซ้าย + legend ขวา */
+.dash-donut-wrap {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  width: 100%;
+  justify-content: center;
+}
+.dash-donut-canvas-box {
+  width: 220px;
+  height: 220px;
+  flex-shrink: 0;
+  position: relative;
+}
+.dash-legend {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  font-size: .9rem;
+}
+.dash-legend-item {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  color: var(--gray-700, #334155);
+}
+.dash-legend-swatch {
+  width: 14px; height: 14px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.dash-legend-label { font-weight: 500; }
+.dash-legend-value {
+  color: var(--gray-500, #64748b);
+  font-size: .82rem;
+  margin-left: auto;
+}
+@media (max-width: 480px) {
+  .dash-donut-wrap { flex-direction: column; gap: .75rem; }
+  .dash-donut-canvas-box { width: 180px; height: 180px; }
+}
+
+/* Trend line — canvas ขยายเต็ม card */
+.dash-line-canvas-box {
+  width: 100%;
+  height: 240px;
+  position: relative;
+}
+/* V2.7.X: trend chart เต็มกว้าง — สูงขึ้นเพราะมี 5 เส้น */
+.dash-line-canvas-box--lg {
+  height: 360px;
+}
+
+/* =========== V2.7.X: DASHBOARD SUMMARY (hero + 6 stats) =========== */
+.dash-summary {
+  display: grid;
+  /* 6 stats แถว 1, hero แถว 2 — บน mobile ลดเป็น 2 คอลัมน์ */
+  grid-template-columns: repeat(6, 1fr);
+  gap: .75rem;
+  margin-bottom: 1rem;
+}
+.dash-summary > .dash-hero {
+  grid-column: 1 / -1;            /* hero เต็มแถว 2 */
+}
+@media (max-width: 1100px) {
+  .dash-summary { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 600px) {
+  .dash-summary { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* V2.7.CN: stat cards เล็กลง (compact) — Hero KPI อยู่ด้านบนแล้ว */
+.dash-stat {
+  display: flex; align-items: center; gap: .65rem;
+  background: #fff;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 12px;
+  padding: .7rem .85rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  transition: transform .15s ease, box-shadow .15s ease;
+  position: relative;
+  overflow: hidden;
+}
+.dash-stat:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(0,0,0,.06);
+}
+.dash-stat-icon {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+.dash-stat-body { min-width: 0; flex: 1; }
+.dash-stat-value {
+  font-size: 1.55rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.01em;
+}
+.dash-stat-label {
+  font-size: .82rem;
+  color: var(--text-3, #6b7280);
+  margin-top: .25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+@media (max-width: 768px) {
+  .dash-stat { padding: .6rem .75rem; gap: .55rem; border-radius: 10px; }
+  .dash-stat-icon { width: 34px; height: 34px; font-size: 14px; border-radius: 9px; }
+  .dash-stat-value { font-size: 1.3rem; }
+  .dash-stat-label { font-size: .76rem; }
+}
+.dash-stat-pct {
+  font-size: .72rem;
+  background: rgba(0,0,0,.05);
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-left: 4px;
+  color: var(--text, #111827);
+  font-weight: 600;
+}
+
+/* — สีตามสถานะ — */
+.dash-stat--total    .dash-stat-icon { background: #eef2ff; color: #4338ca; }
+.dash-stat--total    .dash-stat-value { color: #4338ca; }
+.dash-stat--present  .dash-stat-icon { background: #dcfce7; color: #15803d; }
+.dash-stat--present  .dash-stat-value { color: #15803d; }
+.dash-stat--absent   .dash-stat-icon { background: #fee2e2; color: #b91c1c; }
+.dash-stat--absent   .dash-stat-value { color: #b91c1c; }
+.dash-stat--late     .dash-stat-icon { background: #fef3c7; color: #b45309; }
+.dash-stat--late     .dash-stat-value { color: #b45309; }
+.dash-stat--personal .dash-stat-icon { background: #dbeafe; color: #1d4ed8; }
+.dash-stat--personal .dash-stat-value { color: #1d4ed8; }
+.dash-stat--sick     .dash-stat-icon { background: #f3e8ff; color: #7c3aed; }
+.dash-stat--sick     .dash-stat-value { color: #7c3aed; }
+
+/* V2.7.AD/AI: ตาราง matrix ประวัติเช็คชื่อรายวิชา */
+.sh-table-wrap { overflow-x: auto; max-height: 75vh; }
+.sh-table {
+  font-size: .8rem;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+.sh-table thead th {
+  padding: .45rem .35rem;
+  text-align: center;
+  white-space: nowrap;
+}
+.sh-table tbody td { padding: .35rem .35rem; white-space: nowrap; }
+.sh-table .sh-name-td { min-width: 160px; white-space: normal; }
+/* V2.7.AI: คอลัมน์วันที่ + ตัวเลขสรุป + รวม + % — ขนาดเท่ากันทั้งหมด */
+.sh-table .sh-date-th,
+.sh-table .sh-num-th,
+.sh-table tbody td.sh-date-cell,
+.sh-table tbody td.sh-num-td {
+  width: 50px;
+  min-width: 50px;
+  max-width: 50px;
+  text-align: center;
+}
+.sh-table .sh-date-th {
+  cursor: pointer;
+  font-size: .72rem;
+  line-height: 1.15;
+  background: #fafbff;
+  transition: background .12s;
+  padding: .35rem .15rem;
+}
+.sh-table .sh-date-th:hover { background: #dbeafe; }
+.sh-table .sh-num-td { color: var(--text-3, #6b7280); font-size: .78rem; }
+.sh-table tbody tr:hover { background: #fafbff; }
+
+.sh-cell {
+  display: inline-block;
+  min-width: 28px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: .72rem;
+  font-weight: 600;
+  text-align: center;
+}
+.sh-cell--present  { color: #15803d; background: #dcfce7; }
+.sh-cell--late     { color: #b45309; background: #fef3c7; }
+.sh-cell--sick     { color: #7c3aed; background: #f3e8ff; }
+.sh-cell--personal { color: #1d4ed8; background: #dbeafe; }
+.sh-cell--absent   { color: #b91c1c; background: #fee2e2; }
+.sh-cell--empty    { color: #cbd5e1; background: transparent; }
+
+/* V2.7.AD: print styles — ปริ้นรายงานการเช็คชื่อ */
+.print-only { display: none; }
+@media print {
+  body { background: #fff !important; }
+  .no-print, .sidebar, .topbar, #toast-container, #loading,
+  .topbar-online, .topbar-clock, .nav-section, .sidebar-nav,
+  .sidebar-toggle { display: none !important; }
+  .main-content, .view-container { margin: 0 !important; padding: 8px !important; }
+  .card { box-shadow: none !important; border: 0 !important; padding: 4px !important; margin: 0 !important; }
+  .print-only { display: block; }
+
+  .sh-table-wrap { overflow: visible !important; max-height: none !important; }
+  .sh-table { font-size: 9pt; width: 100%; border-collapse: collapse; }
+  .sh-table thead th, .sh-table tbody td {
+    border: 1px solid #999 !important;
+    padding: 2px 3px !important;
+    color: #000 !important;
+  }
+  .sh-table thead th { background: #f0f0f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sh-table .sh-date-th { font-size: 7pt; cursor: default; }
+  .sh-cell {
+    background: transparent !important;
+    padding: 0 !important;
+    color: inherit !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .sh-cell--present  { color: #16a34a !important; }
+  .sh-cell--late     { color: #d97706 !important; }
+  .sh-cell--sick     { color: #7c3aed !important; }
+  .sh-cell--personal { color: #1d4ed8 !important; }
+  .sh-cell--absent   { color: #dc2626 !important; }
+
+  .t-rate { display: none !important; } /* ใช้แค่ตัวเลข */
+  .t-rate-pct { display: inline-block !important; }
+
+  @page { size: A4 landscape; margin: 8mm; }
+}
+
+/* V2.7.AS: บันทึกหลังการสอน — Print A4 */
+.tl-print-area { display: none; }
+body.printing-tl .tl-print-area {
+  display: block !important;
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 9999; background: #fff; padding: 24px 32px;
+  font-family: 'Sarabun', 'Tahoma', sans-serif; color: #000;
+  overflow: auto;
+}
+body.printing-tl .sidebar,
+body.printing-tl .topbar,
+body.printing-tl .main-content > *:not(.tl-print-area):not(#tl-print-area),
+body.printing-tl #toast-container,
+body.printing-tl #loading,
+body.printing-tl .view-container > *:not(.tl-print-area):not(#tl-print-area) { display: none !important; }
+
+.tl-pr-head { width: 100%; border-bottom: 2px solid #1e3a8a; padding-bottom: .3rem; margin-bottom: .8rem; }
+.tl-pr-head td { vertical-align: middle; }
+.tl-pr-logo { width: 90px; text-align: left; }
+.tl-pr-logo-circle {
+  width: 70px; height: 70px; border-radius: 50%;
+  background: linear-gradient(135deg, #1e3a8a, #4338ca);
+  color: #ffd700; font-weight: 800; font-size: 12px; text-align: center;
+  display: flex; align-items: center; justify-content: center;
+  border: 3px solid #ffd700;
+  line-height: 1.1;
+}
+.tl-pr-title { text-align: center; }
+.tl-pr-title h1 { font-size: 22pt; font-weight: 700; margin: 0; color: #1e3a8a; letter-spacing: 1px; }
+.tl-pr-term { font-size: 13pt; color: #1e3a8a; margin-top: .2rem; }
+.tl-pr-badge { width: 80px; text-align: right; }
+.tl-pr-books { font-size: 32pt; }
+
+.tl-pr-date { text-align: center; margin: .9rem 0 1rem; font-size: 12pt; }
+.tl-pr-date u { display: inline-block; min-width: 90px; text-align: center; padding: 0 .3rem; }
+
+.tl-pr-body { width: 100%; margin-bottom: 1rem; }
+.tl-pr-body td { vertical-align: top; padding: .25rem .5rem; }
+.tl-pr-photo { width: 50%; }
+.tl-pr-img-frame {
+  border: 1px solid #999;
+  width: 100%;
+  height: 240px;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  background: #f9fafb;
+}
+.tl-pr-img-frame img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.tl-pr-info { padding-left: 1rem !important; }
+.tl-pr-info-rows > div { font-size: 12pt; line-height: 2; }
+.tl-pr-info-rows u { display: inline-block; min-width: 80px; padding: 0 .3rem; }
+.tl-pr-lbl { color: #1e3a8a; }
+.tl-pr-val {
+  display: inline-block;
+  border-bottom: 1px dotted #94a3b8;
+  min-width: 100px;
+  padding: 0 .35rem;
+  color: #0f172a;
+  font-weight: 600;
+}
+.tl-pr-val--time { color: #b45309; font-weight: 700; }
+
+/* V2.7.AU: แถวจำนวนนักเรียน — chip สี */
+.tl-pr-att-row {
+  display: flex; flex-wrap: wrap; gap: 6px 10px;
+  align-items: center;
+  margin-top: .65rem;
+  padding: .55rem .7rem;
+  background: linear-gradient(135deg, #f8fafc, #eef2ff);
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 11pt;
+}
+.tl-pr-att-total {
+  flex: 1 1 100%;
+  font-weight: 600;
+  margin-bottom: 4px;
+  border-bottom: 1px dashed #cbd5e1;
+  padding-bottom: 4px;
+}
+.tl-pr-att-total .tl-pr-num { color: #1e3a8a; font-size: 14pt; font-weight: 800; padding: 0 .35rem; }
+.tl-pr-att-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 11pt; font-weight: 600;
+  border: 1.5px solid;
+}
+.tl-pr-att-chip span { font-size: 12pt; font-weight: 800; }
+.tl-pr-att-present  { color: #15803d; background: #dcfce7; border-color: #86efac; }
+.tl-pr-att-late     { color: #b45309; background: #fef3c7; border-color: #fcd34d; }
+.tl-pr-att-sick     { color: #7c3aed; background: #f3e8ff; border-color: #d8b4fe; }
+.tl-pr-att-personal { color: #1d4ed8; background: #dbeafe; border-color: #93c5fd; }
+.tl-pr-att-absent   { color: #b91c1c; background: #fee2e2; border-color: #fca5a5; }
+
+.tl-pr-section {
+  margin-top: .55rem;
+  page-break-inside: avoid;
+}
+.tl-pr-h {
+  font-size: 12.5pt;
+  font-weight: 700;
+  color: #1e3a8a;
+  border-bottom: 1px solid #cbd5e1;
+  padding-bottom: 2px;
+  margin-bottom: .25rem;
+}
+.tl-pr-content {
+  font-size: 12pt;
+  min-height: 1.6em;
+  padding: .25rem .5rem;
+  white-space: pre-wrap;
+  border: 1px dashed transparent;
+}
+.tl-pr-sign { width: 100%; margin-top: 2rem; }
+.tl-pr-sign td { width: 50%; padding: 0 1rem; font-size: 12pt; }
+
+@media print {
+  @page { size: A4; margin: 12mm 14mm; }
+  body { background: #fff !important; }
+  .sidebar, .topbar, #toast-container, #loading { display: none !important; }
+  .tl-print-area { display: block !important; padding: 0; position: static; box-shadow: none; }
+  .main-content > *:not(.tl-print-area):not(#tl-print-area),
+  .view-container > *:not(.tl-print-area):not(#tl-print-area) { display: none !important; }
+}
+
+/* V2.7.BO/BR: หน้าเช็คชื่อ Mobile (Stack แนวตั้ง) — กระชับ ไม่กว้างเกิน */
+@media (max-width: 600px) {
+  .student-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+    padding: 8px 10px !important;
+    min-height: 0 !important;
+  }
+  .student-info {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 4px 8px !important;
+    width: 100% !important;
+    flex: 0 0 auto !important;
+  }
+  .student-name { white-space: normal !important; max-width: none !important; flex: 1 1 auto !important; }
+  .att-note-wrap { flex: 1 1 100% !important; min-width: 0 !important; }
+  .att-note { width: 100% !important; max-width: 100% !important; height: 30px !important; }
+  .status-buttons {
+    display: grid !important;
+    grid-template-columns: repeat(5, 1fr) !important;
+    gap: 3px !important;
+    width: 100% !important;
+    flex: 0 0 auto !important;
+  }
+  .status-btn {
+    padding: 6px 0 !important;
+    font-size: 11px !important;
+    min-height: 32px !important;
+    line-height: 1.1 !important;
+  }
+  .status-badge { font-size: 10px !important; padding: 1px 6px !important; }
+  /* ลด padding ของ card รอบ ๆ */
+  .card { padding: .6rem !important; }
+}
+
+/* V2.7.BQ: Mobile responsive ≤768px — sidebar overlay + table scroll */
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed !important;
+    top: 0; left: 0; bottom: 0;
+    width: 260px !important;
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    z-index: 1080;
+    box-shadow: 2px 0 12px rgba(0,0,0,.2);
+  }
+  body.sb-open .sidebar { transform: translateX(0); }
+  body.sb-open::after {
+    content: ''; position: fixed; inset: 0;
+    background: rgba(0,0,0,.4); z-index: 1070;
+  }
+  .main-content { margin-left: 0 !important; padding-left: 8px !important; padding-right: 8px !important; }
+  .topbar { padding-left: 56px !important; } /* เว้นที่ปุ่มแฮมเบอร์เกอร์ */
+  /* ตารางทุกตัว: scroll ซ้าย-ขวาได้ */
+  table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+  .table-wrapper, .sh-table-wrap { overflow-x: auto !important; }
+}
+
+/* V2.7.BO: Collapsible sidebar */
+.sidebar { transition: width .25s ease; }
+body.sb-collapsed .sidebar { width: 56px !important; overflow: hidden; }
+body.sb-collapsed .sidebar .nav-section,
+body.sb-collapsed .sidebar .nav-btn span,
+body.sb-collapsed .sidebar .user-info,
+body.sb-collapsed .sidebar .btn-foot,
+body.sb-collapsed .sidebar .sidebar-credit,
+body.sb-collapsed .sidebar .sidebar-header > * { display: none !important; }
+body.sb-collapsed .sidebar .nav-btn { justify-content: center; padding: 10px 0 !important; }
+body.sb-collapsed .main-content { margin-left: 56px !important; }
+.sb-toggle-btn {
+  position: fixed; top: 12px; left: 8px; z-index: 1100;
+  background: var(--primary, #1e3a8a); color: #fff;
+  width: 36px; height: 36px; border-radius: 8px; border: 0;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.2);
+}
+
+/* V2.7.AQ: สถานะบันทึกหลังสอนใน dashboard table */
+.tl-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+.tl-status--ok   { color: #16a34a; }
+.tl-status--none { color: #cbd5e1; }
+
+/* V2.7.BE: print กลาง — ซ่อนทุกอย่าง แสดงเฉพาะ .print-target */
+@media print {
+  body.print-mode * { visibility: hidden !important; }
+  body.print-mode .print-target,
+  body.print-mode .print-target * { visibility: visible !important; }
+  body.print-mode .print-target {
+    position: absolute !important;
+    left: 0 !important; top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important; padding: 8mm !important;
+    box-shadow: none !important; border: 0 !important;
+    background: #fff !important;
+  }
+  body.print-mode .no-print { display: none !important; }
+  @page { size: A4; margin: 12mm; }
+}
+
+/* V2.7.AO: รายงานบันทึกหลังสอน */
+.tlr-item {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  padding: .75rem 1rem;
+  margin-bottom: .75rem;
+  background: #fff;
+}
+.tlr-item-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .5rem;
+  border-bottom: 1px dashed #e5e7eb;
+  padding-bottom: .4rem;
+  margin-bottom: .5rem;
+}
+.tlr-item-date { font-weight: 700; color: #312e81; font-size: 1rem; }
+.tlr-item-body { display: flex; gap: 1rem; flex-wrap: wrap; }
+.tlr-item-img { width: 200px; max-height: 150px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
+.tlr-item-text { flex: 1; min-width: 200px; font-size: .85rem; line-height: 1.7; color: var(--text, #111827); }
+.tlr-item-text > div { margin-bottom: .15rem; }
+.tlr-item-foot {
+  margin-top: .5rem; padding-top: .4rem;
+  border-top: 1px dashed #f1f5f9;
+  font-size: .75rem; color: var(--text-3, #6b7280); text-align: right;
+}
+
+/* V2.7.AN: หน้าบันทึกหลังสอน */
+.tl-image-wrap { padding: .5rem 0; }
+.tl-image-preview {
+  border: 2px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 1rem;
+  text-align: center;
+  background: #fafbff;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+.tl-image-preview--empty { background: #f8fafc; }
+.tl-image-preview img { max-width: 500px; }
+.sh-tl-link {
+  display: inline-block;
+  cursor: pointer;
+  font-size: 12px;
+  margin-top: 2px;
+  opacity: .55;
+  transition: opacity .12s, transform .12s;
+}
+.sh-tl-link:hover { opacity: 1; transform: scale(1.2); }
+
+/* V2.7.AC: row clickable ในตาราง dashboard */
+.dash-row-clickable { cursor: pointer; transition: background .12s; }
+.dash-row-clickable:hover { background: #eff6ff !important; }
+
+/* V2.7.BL: subject-detail modal — ขยายเต็มจอ + row กะทัดรัด เพื่อให้รายชื่อครบในหน้าเดียว */
+#subject-detail-modal .modal-card {
+  max-width: 1100px !important;
+  width: 96% !important;
+  max-height: 95vh !important;
+  display: flex; flex-direction: column;
+}
+#subject-detail-modal .modal-body { flex: 1; overflow: auto; }
+#subject-detail-modal .table-wrapper { max-height: none !important; }
+#subject-detail-modal .dash-class-table { font-size: .8rem; }
+#subject-detail-modal .dash-class-table tbody td { padding: .2rem .35rem !important; line-height: 1.25; }
+#subject-detail-modal .dash-class-table thead th { padding: .3rem .35rem; font-size: .75rem; }
+@media (max-width: 600px) {
+  #subject-detail-modal .modal-card { max-height: 100vh !important; height: 100vh; }
+}
+
+/* V2.7.AE: backdrop เฉพาะ subject-detail modal (เลี่ยง .modal-backdrop ของ Bootstrap ที่ display:flex !important) */
+.sd-modal-bg {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,.5);
+  z-index: 1050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: modal-fade-in .15s ease;
+}
+/* V2.7.AH: บังคับซ่อน — override ทุก rule รวม Bootstrap !important */
+.sd-hide,
+.sd-modal-bg.sd-hide { display: none !important; }
+
+/* V2.7.AC: modal-card variant (ใช้ modal-backdrop เดิม) */
+.modal-card {
+  background: #fff;
+  border-radius: var(--r-lg);
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,.3);
+  animation: modal-pop .2s ease;
+}
+.modal-head {
+  background: linear-gradient(135deg, #312e81 0%, #4338ca 100%);
+  color: #fff;
+  padding: 14px 18px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
+}
+.modal-head .modal-title { font-size: 15px; font-weight: 700; margin: 0; color: #fff; }
+.modal-head .modal-subtitle { font-size: 12px; opacity: .9; margin-top: 2px; }
+.modal-body { padding: 16px; overflow: auto; flex: 1; }
+
+/* V2.7.Y: ตารางสรุปแยกห้อง */
+.dash-class-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .85rem;
+}
+.dash-class-table thead th {
+  text-align: left;
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--text-3, #6b7280);
+  padding: .6rem .55rem;
+  border-bottom: 2px solid var(--border, #e5e7eb);
+  background: #fafbfc;
+  position: sticky; top: 0; z-index: 1;
+  white-space: nowrap;
+}
+.dash-class-table .t-center { text-align: center; }
+.dash-class-table .t-st-present  { color: #15803d; }
+.dash-class-table .t-st-absent   { color: #b91c1c; }
+.dash-class-table .t-st-late     { color: #b45309; }
+.dash-class-table .t-st-personal { color: #1d4ed8; }
+.dash-class-table .t-st-sick     { color: #7c3aed; }
+
+.dash-class-table tbody td {
+  padding: .55rem .55rem;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+}
+.dash-class-table tbody tr:hover { background: #fafbff; }
+
+.t-pill {
+  display: inline-flex; align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: .8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.t-pill-major { background: #fee2e2; color: #b91c1c; }
+.t-pill-level { background: #ffedd5; color: #c2410c; }
+
+.t-num {
+  display: inline-block;
+  min-width: 28px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: .82rem;
+  text-align: center;
+}
+.t-num--zero      { background: transparent; color: #94a3b8; font-weight: 500; }
+.t-num--present   { background: #dcfce7; color: #15803d; }
+.t-num--absent    { background: #fee2e2; color: #b91c1c; }
+.t-num--late      { background: #fef3c7; color: #b45309; }
+.t-num--personal  { background: #dbeafe; color: #1d4ed8; }
+.t-num--sick      { background: #f3e8ff; color: #7c3aed; }
+
+.t-time {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: .8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.t-time--ok   { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.t-time--none { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; font-weight: 500; }
+.t-time--none small { color: #b45309; margin-left: 4px; }
+
+.t-rate { display: flex; align-items: center; gap: 8px; min-width: 130px; }
+.t-rate-bar {
+  flex: 1;
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.t-rate-fill { height: 100%; border-radius: 999px; transition: width .25s; }
+.t-rate-fill.ok  { background: linear-gradient(90deg, #16a34a, #22c55e); }
+.t-rate-fill.mid { background: linear-gradient(90deg, #d97706, #f59e0b); }
+.t-rate-fill.low { background: linear-gradient(90deg, #dc2626, #ef4444); }
+.t-rate-pct { font-weight: 700; font-size: .82rem; min-width: 38px; text-align: right; }
+.t-rate-pct.ok  { color: #15803d; }
+.t-rate-pct.mid { color: #b45309; }
+.t-rate-pct.low { color: #b91c1c; }
+
+/* Hero card — % เข้าแถว ใหญ่ๆ */
+.dash-hero {
+  position: relative;
+  background: linear-gradient(135deg, #312e81 0%, #4338ca 60%, #6366f1 100%);
+  color: #fff;
+  border-radius: 12px;
+  padding: 1.1rem 1.4rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 110px;
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(67,56,202,.25);
+}
+.dash-hero-label { font-size: .9rem; opacity: .92; }
+.dash-hero-value {
+  font-size: 2.6rem;
+  font-weight: 800;
+  line-height: 1;
+  margin: .3rem 0 .15rem;
+  font-variant-numeric: tabular-nums;
+}
+.dash-hero-unit { font-size: 1.5rem; font-weight: 700; opacity: .85; margin-left: .15rem; }
+.dash-hero-sub  { font-size: .85rem; opacity: .85; }
+.dash-hero-icon {
+  position: absolute; right: 1.1rem; top: 50%; transform: translateY(-50%);
+  font-size: 4rem; opacity: .14; pointer-events: none;
+}
+
+/* Legacy login-container (already defined above, ensure center)
+   kept here as comment — no extra rules needed. */
+
+/* Flex helpers used in templates */
+.text-right { text-align: right; }
+.flex.gap-2 { display: flex; gap: 8px; }
+.flex.mb-4 { display: flex; }
+
+/* Small color buttons */
+.btn.btn-sm.btn-primary,
+.btn-sm.btn-primary { background: var(--pgrad); color: #fff; border: none; }
+.btn.btn-sm.btn-secondary,
+.btn-sm.btn-secondary { background: linear-gradient(135deg,#37474f,#546e7a); color: #fff; border: none; }
+.btn.btn-sm.btn-success,
+.btn-sm.btn-success { background: linear-gradient(135deg,#1b5e20,#2e7d32); color: #fff; border: none; }
+.btn.btn-sm.btn-danger,
+.btn-sm.btn-danger { background: linear-gradient(135deg,#b71c1c,#e53935); color: #fff; border: none; }
+.btn.btn-sm.btn-warning,
+.btn-sm.btn-warning { background: linear-gradient(135deg,#e65100,#fb8c00); color: #fff; border: none; }
+
+/* V2.7.CB: helper classes สำหรับซ่อน/แสดงตาม viewport */
+.show-mobile { display: none; }
+
+/* =========== RESPONSIVE =========== */
+@media (max-width: 768px) {
+  .hide-mobile { display: none !important; }
+  .show-mobile { display: table-cell !important; }
+  .btn-hamburger { display: block; }
+  #sidebar { transform: translateX(-100%); }
+  #sidebar.open { transform: translateX(0); }
+  #main-content, .main-content {
+    margin-left: 0 !important;
+    padding-bottom: 60px;
+  }
+  #bottom-nav { display: block; }
+  .topbar { padding: 0 10px; gap: 6px; }
+  .page-title { font-size: 13.5px; }
+  .content-area { padding: 10px; }
+  .filter-bar { gap: 8px; padding: 10px 12px; }
+  .fg { width: calc(50% - 4px); }
+  .fg.fg-full { width: 100%; }
+  .fg select, .fg input[type="date"], .fg input[type="text"] {
+    min-width: 0 !important;
+    width: 100%;
+    font-size: 14px;
+    padding: 8px 10px;
+  }
+  .btn { font-size: 13px; padding: 9px 14px; min-height: 40px; }
+  .btn-sm { min-height: 34px; padding: 6px 10px; font-size: 12px; }
+  .stat-card { padding: 12px; gap: 10px; }
+  .stat-value { font-size: 20px; }
+  .stat-icon { width: 42px; height: 42px; font-size: 18px; }
+  .overall-card { padding: 12px; }
+  .overall-card .oc-val { font-size: 24px; }
+  .table { font-size: 12.5px; }
+  .table thead th, .table tbody td { padding: 8px 10px; white-space: nowrap; }
+  .toast-container {
+    left: 10px; right: 10px; bottom: 70px;
+    max-width: none;
+  }
+  .modal-dialog { border-radius: var(--r-md); }
+
+  /* Topbar user: mobile collapse */
+  .topbar-user { padding: 3px 8px 3px 3px; gap: 6px; }
+  .topbar-user .tu-info { display: none; }
+  .topbar-user .tu-caret { display: none; }
+  .tu-avatar { width: 30px; height: 30px; font-size: 11.5px; }
+
+  /* Active users badge: mobile collapse (ซ่อนข้อความ "ออนไลน์") */
+  .active-users-badge { padding: 4px 9px; gap: 5px; }
+  .active-users-badge .au-label { display: none; }
+  .au-popover { min-width: 240px; right: -40px; }
+}
+
+@media (max-width: 480px) {
+  .fg { width: 100%; }
+  .stat-value { font-size: 18px; }
+  .stat-icon { width: 38px; height: 38px; font-size: 16px; }
+  .login-card { padding: 26px 20px; border-radius: 16px; }
+  .logo-circle { width: 62px; height: 62px; }
+  .logo-circle i, .logo-circle span { font-size: 26px; }
+  .login-title { font-size: 15px; }
+  .clock-box { padding: 3px 8px; min-width: 62px; }
+  .clock-time { font-size: 13px; }
+  .clock-sec { font-size: 10px; }
+  .clock-date { display: none; }
+}
+
+@media print {
+  body { background: #fff !important; }
+  #sidebar, #sidebar-overlay, #bottom-nav, .topbar,
+  .filter-bar, .btn, .no-print,
+  .loading-overlay, .toast-container {
+    display: none !important;
+  }
+  #main-content, .main-content { margin-left: 0 !important; }
+  .content-area { padding: 0 !important; }
+  .table-card { box-shadow: none !important; border-radius: 0 !important; }
+  .table { font-size: 11pt; }
+  .table thead th {
+    background: var(--primary) !important;
+    color: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  @page { margin: 15mm; }
+}
+

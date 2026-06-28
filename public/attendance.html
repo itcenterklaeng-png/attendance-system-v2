@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#1a237e" />
+  <title>เช็คชื่อนักเรียน — เลือกรายวิชา</title>
+  <link rel="icon" href="https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DLEchopSbfi&sz=w128" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div id="alert-area"></div>
+
+  <!-- Welcome card -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">👋 สวัสดี <span id="teacher-name"></span></div>
+        <div class="card-subtitle" id="today-date"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mode filter -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><i class="fas fa-layer-group me-1"></i> เลือกประเภทการเรียน</div>
+    </div>
+    <div class="flex" style="flex-wrap:wrap;gap:.5rem;">
+      <button type="button" class="btn btn-sm btn-primary" data-mode="all">ทั้งหมด</button>
+      <button type="button" class="btn btn-sm btn-outline-primary" data-mode="normal">ปกติ</button>
+      <button type="button" class="btn btn-sm btn-outline-primary" data-mode="upskill">Upskill / Reskill / Newskill</button>
+      <button type="button" class="btn btn-sm btn-outline-primary" data-mode="short">ระยะสั้น</button>
+    </div>
+  </div>
+
+  <!-- Subjects list -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">📚 วิชาที่สอน <span id="subj-mode-label" class="badge bg-secondary"></span></div>
+      <div class="text-muted" id="subj-count" style="font-size:.85rem;"></div>
+    </div>
+    <div id="subjects-list">
+      <div class="empty-state"><div class="spinner" style="margin:0 auto 1rem;"></div><p>กำลังโหลดวิชา...</p></div>
+    </div>
+    <div id="no-today-btn-wrap" style="display:none;text-align:center;margin-top:.75rem;">
+      <button class="btn btn-sm btn-secondary" id="btn-toggle-notoday">
+        <i class="fas fa-eye me-1"></i> ดูวิชาที่ไม่มีคาบวันนี้ (<span id="no-today-count">0</span>)
+      </button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth } from './js/auth.js';
+    import { initLayout } from './js/layout.js';
+    import { getTeacherHome } from './js/api.js';
+    import { supabase } from './js/supabase-client.js';
+    import { showAlert, todayISO, formatThaiDate, esc } from './js/utils.js';
+
+    const profile = await requireAuth();
+    if (!profile) throw new Error('not authed');
+    initLayout(profile, 'attendance', { title: 'เช็คชื่อนักเรียน', icon: 'fa-clipboard-check' });
+
+    // Welcome
+    const name = profile.teacher_full_name || profile.full_name || profile.email;
+    document.getElementById('teacher-name').textContent = name;
+    const today = new Date();
+    const days = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
+    const months = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+    document.getElementById('today-date').textContent =
+      `วัน${days[today.getDay()]} ที่ ${today.getDate()} ${months[today.getMonth()]} ${today.getFullYear() + 543}`;
+
+    // State
+    let allSubjects = [];
+    let currentMode = 'all';
+    let showNoToday = false;
+
+    // Mode buttons
+    document.querySelectorAll('[data-mode]').forEach(btn => {
+      btn.onclick = () => {
+        currentMode = btn.dataset.mode;
+        document.querySelectorAll('[data-mode]').forEach(b => {
+          b.className = b.dataset.mode === currentMode
+            ? 'btn btn-sm btn-primary'
+            : 'btn btn-sm btn-outline-primary';
+        });
+        const labelMap = { all:'ทั้งหมด', normal:'ปกติ', upskill:'Upskill/Reskill/Newskill', short:'ระยะสั้น' };
+        document.getElementById('subj-mode-label').textContent = labelMap[currentMode];
+        renderSubjects();
+      };
+    });
+    document.getElementById('subj-mode-label').textContent = 'ทั้งหมด';
+
+    // Toggle no-today subjects
+    document.getElementById('btn-toggle-notoday').onclick = () => {
+      showNoToday = !showNoToday;
+      renderSubjects();
+    };
+
+    // Load
+    try {
+      let subjects;
+      if (profile.role === 'admin' && !profile.teacher_id) {
+        // admin ไม่มี teacher_id → แสดงทุกวิชา (รุ่นเรียบง่าย)
+        const { data, error } = await supabase
+          .from('subjects')
+          .select('subject_id, subject_name, major, course_type, total_hours, start_date, end_date')
+          .order('subject_id');
+        if (error) throw error;
+        // แปลงให้คล้าย get_teacher_home output
+        subjects = (data || []).map(s => ({
+          subject_id: s.subject_id, subject_name: s.subject_name,
+          major: s.major, course_type: s.course_type,
+          total_hours: s.total_hours, start_date: s.start_date, end_date: s.end_date,
+          today_periods: null, has_round_1: false, has_round_2: false, has_teaching_log: false,
+          classes: []
+        }));
+      } else {
+        subjects = await getTeacherHome(profile.teacher_id, todayISO());
+      }
+      allSubjects = subjects;
+      renderSubjects();
+    } catch (e) {
+      document.getElementById('subjects-list').innerHTML =
+        `<div class="alert alert-error">โหลด fail: ${esc(e.message)}</div>`;
+    }
+
+    function renderSubjects() {
+      // filter by mode
+      let list = allSubjects;
+      if (currentMode !== 'all') list = list.filter(s => (s.course_type || 'normal') === currentMode);
+
+      // split: มีคาบวันนี้ vs ไม่มี
+      const today = list.filter(s => s.today_periods);
+      const noToday = list.filter(s => !s.today_periods);
+      document.getElementById('subj-count').innerHTML = `วันนี้ <b>${today.length}</b> · ทั้งหมด <b>${list.length}</b>`;
+
+      const shown = showNoToday ? list : today;
+
+      const container = document.getElementById('subjects-list');
+      if (shown.length === 0) {
+        container.innerHTML = `<div class="empty-state">
+          <i class="fas fa-folder-open" style="font-size:2rem;color:var(--text-3);"></i>
+          <p>${currentMode === 'all' ? 'ไม่มีวิชาที่มีคาบวันนี้' : 'ไม่มีวิชาในประเภทนี้ที่มีคาบวันนี้'}</p>
+        </div>`;
+      } else {
+        container.innerHTML = shown.map(renderSubjectCard).join('');
+      }
+
+      // toggle "ดูวิชาที่ไม่มีคาบวันนี้"
+      const wrap = document.getElementById('no-today-btn-wrap');
+      const cntEl = document.getElementById('no-today-count');
+      if (noToday.length > 0) {
+        wrap.style.display = '';
+        cntEl.textContent = noToday.length;
+        document.getElementById('btn-toggle-notoday').innerHTML =
+          showNoToday
+            ? `<i class="fas fa-eye-slash me-1"></i> ซ่อนวิชาที่ไม่มีคาบวันนี้`
+            : `<i class="fas fa-eye me-1"></i> ดูวิชาที่ไม่มีคาบวันนี้ (${noToday.length})`;
+      } else {
+        wrap.style.display = 'none';
+      }
+    }
+
+    function renderSubjectCard(s) {
+      const ctLabel = { normal:'ปกติ', upskill:'Upskill', short:'ระยะสั้น' }[s.course_type] || s.course_type || 'normal';
+      const ctColor = { normal:'#1565c0', upskill:'#7c3aed', short:'#0891b2' }[s.course_type] || '#1a237e';
+      const dateRange = (s.start_date && s.end_date)
+        ? `${formatThaiDate(s.start_date).split(' ').slice(0,3).join(' ')} - ${formatThaiDate(s.end_date).split(' ').slice(0,3).join(' ')}`
+        : '';
+      const hoursTxt = s.total_hours ? `${s.total_hours} ชม.` : '';
+
+      // status badges
+      const statusBadges = [];
+      if (s.has_round_1) statusBadges.push('<span class="badge bg-success"><i class="fas fa-check"></i> เช็ครอบ 1</span>');
+      else statusBadges.push('<span class="badge bg-secondary"><i class="fas fa-times"></i> ยังไม่เช็ค</span>');
+      if (s.has_round_2) statusBadges.push('<span class="badge bg-success"><i class="fas fa-check"></i> รอบ 2</span>');
+      if (s.has_teaching_log) statusBadges.push('<span class="badge bg-info"><i class="fas fa-edit"></i> บันทึกหลังสอน</span>');
+
+      // classes block
+      const classesHtml = (s.classes && s.classes.length > 0)
+        ? s.classes.map(c => `
+          <div class="class-row">
+            <i class="fas fa-users me-1" style="color:var(--primary);"></i>
+            <b>${esc(c.label)}</b>
+            <span class="text-muted" style="font-size:.85rem;">(${c.student_count} คน)</span>
+          </div>
+        `).join('')
+        : '<div class="text-muted" style="font-size:.85rem;padding:.5rem 0;">— ยังไม่มีห้องลงทะเบียน</div>';
+
+      const noPeriodWarn = !s.today_periods
+        ? `<div class="alert alert-warn" style="margin:.5rem 0;font-size:.85rem;padding:.4rem .7rem;">
+            <i class="fas fa-exclamation-triangle me-1"></i> ไม่มีตารางสอนวันนี้ — กดเช็คเพื่อบันทึกย้อนหลัง
+          </div>`
+        : '';
+
+      return `
+        <div class="subj-card">
+          <div class="subj-head">
+            <div style="flex:1;">
+              <div class="subj-name">${esc(s.subject_name)}</div>
+              <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.35rem;align-items:center;">
+                <span style="background:${ctColor}15;color:${ctColor};border:1px solid ${ctColor}40;padding:.15rem .5rem;border-radius:6px;font-size:.75rem;font-weight:600;">${ctLabel}</span>
+                <code style="font-size:.7rem;color:var(--text-3);">${esc(s.subject_id)}</code>
+              </div>
+            </div>
+            <div style="text-align:right;display:flex;flex-direction:column;gap:.25rem;align-items:flex-end;">
+              ${statusBadges.join('')}
+            </div>
+          </div>
+
+          <div class="subj-meta">
+            ${dateRange ? `<span><i class="fas fa-calendar-alt me-1"></i> ${dateRange}</span>` : ''}
+            ${hoursTxt ? `<span><i class="fas fa-clock me-1"></i> ${hoursTxt}</span>` : ''}
+            ${s.today_periods ? `<span><i class="fas fa-history me-1"></i> คาบวันนี้: <b>${esc(s.today_periods)}</b></span>` : ''}
+          </div>
+
+          ${noPeriodWarn}
+
+          <div class="subj-classes">${classesHtml}</div>
+
+          <div class="subj-actions">
+            <a class="btn btn-primary btn-sm" href="attendance-check.html?subject=${encodeURIComponent(s.subject_id)}&round=1">
+              <i class="fas fa-clipboard-check me-1"></i> เช็คชื่อวันนี้
+            </a>
+            <a class="btn btn-warning btn-sm" href="attendance-check.html?subject=${encodeURIComponent(s.subject_id)}&round=2">
+              <i class="fas fa-redo me-1"></i> เช็ครอบ 2
+            </a>
+            <a class="btn btn-outline-success btn-sm" href="teaching-log.html?subject=${encodeURIComponent(s.subject_id)}">
+              <i class="fas fa-edit me-1"></i> บันทึกหลังสอน
+            </a>
+            <a class="btn btn-outline-info btn-sm" href="reports.html?subject=${encodeURIComponent(s.subject_id)}">
+              <i class="fas fa-chart-bar me-1"></i> ดูประวัติ
+            </a>
+          </div>
+        </div>
+      `;
+    }
+  </script>
+
+  <style>
+    .subj-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: .9rem 1rem;
+      margin-bottom: .75rem;
+      transition: all .15s;
+    }
+    .subj-card:hover { border-color: var(--primary); box-shadow: 0 2px 8px rgba(26,35,126,.08); }
+    .subj-head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: flex-start; }
+    .subj-name { font-weight: 700; font-size: 1.05rem; color: var(--text); }
+    .subj-meta {
+      display: flex; flex-wrap: wrap; gap: .75rem;
+      margin-top: .5rem;
+      color: var(--text-2);
+      font-size: .82rem;
+    }
+    .subj-meta b { color: var(--primary); }
+    .subj-classes {
+      background: #f8fafc;
+      border-radius: 6px;
+      padding: .4rem .6rem;
+      margin: .5rem 0;
+    }
+    .subj-classes .class-row { padding: .15rem 0; font-size: .9rem; }
+    .subj-actions {
+      display: flex; gap: .35rem; flex-wrap: wrap;
+      margin-top: .6rem;
+    }
+    .subj-actions .btn { font-size: .8rem; padding: .35rem .7rem; }
+    .alert-warn { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; border-radius: 6px; }
+    .badge { padding: .25rem .55rem; font-size: .72rem; border-radius: 6px; }
+  </style>
+</body>
+</html>

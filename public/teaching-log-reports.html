@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#1a237e" />
+  <title>รายงานบันทึกหลังสอน — ระบบเช็คชื่อนักเรียน</title>
+  <link rel="icon" href="https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DLEchopSbfi&sz=w128" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div id="alert-area"></div>
+
+  <div class="card no-print">
+    <div class="card-header">
+      <div>
+        <div class="card-title">📋 รายงานบันทึกหลังสอน</div>
+        <div class="card-subtitle" id="tlr-subtitle" style="color:var(--text-2);font-size:.85rem;">
+          เลือกรายวิชาเพื่อดูบันทึกหลังสอนทั้งหมดของวิชานั้น
+        </div>
+      </div>
+    </div>
+
+    <div class="flex" style="gap:.5rem;flex-wrap:wrap;align-items:center;padding:.5rem 0 0;border-top:1px dashed var(--border);margin-top:.5rem;">
+      <i class="fas fa-search" style="color:var(--text-2);"></i>
+      <input type="text" id="tlr-search" class="form-control" style="max-width:280px;font-size:.9rem;"
+             placeholder="ค้นหารายวิชา..." />
+      <span id="tlr-count" style="margin-left:auto;color:var(--text-2);font-size:.85rem;"></span>
+    </div>
+  </div>
+
+  <!-- List card -->
+  <div class="card no-print" id="tlr-list-card">
+    <div id="tlr-list">
+      <div class="empty-state"><div class="spinner" style="margin:0 auto 1rem;"></div><p>กำลังโหลด...</p></div>
+    </div>
+  </div>
+
+  <!-- Detail card -->
+  <div class="card" id="tlr-detail-card" style="display:none;">
+    <div class="card-header" style="flex-wrap:wrap;gap:.5rem;">
+      <div style="flex:1;">
+        <div class="card-title" id="tlr-detail-title">บันทึกหลังสอน</div>
+        <div class="card-subtitle" id="tlr-detail-meta" style="color:var(--text-2);font-size:.85rem;"></div>
+      </div>
+      <div class="flex no-print" style="gap:.4rem;flex-wrap:wrap;">
+        <button class="btn btn-success btn-sm" id="btn-print-all">
+          <i class="fas fa-print me-1"></i> ปริ้นทั้งหมด
+        </button>
+        <button class="btn btn-secondary btn-sm" id="btn-close-detail">
+          <i class="fas fa-times me-1"></i> ปิด
+        </button>
+      </div>
+    </div>
+    <div id="tlr-detail-list"></div>
+  </div>
+
+  <script type="module">
+    import { requireAuth } from './js/auth.js';
+    import { initLayout } from './js/layout.js';
+    import { getTeacherHome, listTeachingLogs } from './js/api.js';
+    import { supabase } from './js/supabase-client.js';
+    import { showAlert, todayISO, formatThaiDate, esc } from './js/utils.js';
+
+    const profile = await requireAuth();
+    if (!profile) throw new Error('not authed');
+    initLayout(profile, 'teaching-log-reports', { title: 'รายงานบันทึกหลังสอน', icon: 'fa-file-alt' });
+
+    let allSubjects = [];
+    let currentSubjectId = null;
+    let currentSubjectName = '';
+
+    document.getElementById('tlr-search').addEventListener('input', debounce(renderList, 200));
+    document.getElementById('btn-close-detail').onclick = () => {
+      document.getElementById('tlr-detail-card').style.display = 'none';
+      document.getElementById('tlr-list-card').style.display = '';
+      currentSubjectId = null;
+    };
+    document.getElementById('btn-print-all').onclick = () => window.print();
+
+    await loadSubjects();
+
+    async function loadSubjects() {
+      try {
+        if (profile.role === 'admin' && !profile.teacher_id) {
+          const { data, error } = await supabase
+            .from('subjects')
+            .select('subject_id, subject_name, start_date, end_date, course_type')
+            .order('subject_id');
+          if (error) throw error;
+          allSubjects = data || [];
+        } else {
+          const subjects = await getTeacherHome(profile.teacher_id, todayISO());
+          allSubjects = subjects.map(s => ({
+            subject_id: s.subject_id,
+            subject_name: s.subject_name,
+            start_date: s.start_date,
+            end_date: s.end_date,
+            course_type: s.course_type
+          }));
+        }
+        renderList();
+      } catch (e) {
+        document.getElementById('tlr-list').innerHTML =
+          `<div class="alert alert-error">โหลด fail: ${esc(e.message)}</div>`;
+      }
+    }
+
+    function renderList() {
+      const q = (document.getElementById('tlr-search').value || '').toLowerCase();
+      let visible = allSubjects;
+      if (q) visible = visible.filter(s =>
+        (s.subject_id || '').toLowerCase().includes(q) ||
+        (s.subject_name || '').toLowerCase().includes(q)
+      );
+      visible.sort((a, b) => (a.subject_name || '').localeCompare(b.subject_name || '', 'th'));
+
+      document.getElementById('tlr-count').textContent = visible.length + ' วิชา';
+
+      const list = document.getElementById('tlr-list');
+      if (visible.length === 0) {
+        list.innerHTML = `<div class="empty-state">
+          <i class="fas fa-folder-open" style="font-size:2rem;color:var(--text-3);"></i>
+          <p>${q ? 'ไม่พบรายวิชา' : 'ยังไม่มีวิชา'}</p>
+        </div>`;
+        return;
+      }
+      list.innerHTML = `
+        <div class="table-wrapper" style="overflow-x:auto;">
+          <table class="table table-hover" style="font-size:.9rem;">
+            <thead style="background:#f0f2f5;">
+              <tr>
+                <th class="text-center" style="width:50px;">ลำดับ</th>
+                <th>รายวิชา</th>
+                <th>ภาคการศึกษา</th>
+                <th class="text-center" style="width:160px;">การดำเนินการ</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${visible.map((s, i) => {
+                const dr = (s.start_date && s.end_date)
+                  ? `${formatThaiDate(s.start_date).split(' ').slice(0,3).join(' ')} - ${formatThaiDate(s.end_date).split(' ').slice(0,3).join(' ')}`
+                  : '-';
+                return `
+                  <tr>
+                    <td class="text-center"><b>${i + 1}</b></td>
+                    <td><i class="fas fa-book me-1" style="color:#94a3b8;"></i><b>${esc(s.subject_name)}</b><br><code style="font-size:.7rem;">${esc(s.subject_id)}</code></td>
+                    <td style="font-size:.85rem;">📅 ${esc(dr)}</td>
+                    <td class="text-center">
+                      <button type="button" class="btn btn-primary btn-sm" data-sid="${esc(s.subject_id)}" data-name="${esc(s.subject_name)}">
+                        <i class="fas fa-list me-1"></i> ดูบันทึก
+                      </button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>`;
+      list.querySelectorAll('button[data-sid]').forEach(b => {
+        b.onclick = () => openDetail(b.dataset.sid, b.dataset.name);
+      });
+    }
+
+    async function openDetail(sid, name) {
+      currentSubjectId = sid;
+      currentSubjectName = name;
+      document.getElementById('tlr-list-card').style.display = 'none';
+      document.getElementById('tlr-detail-card').style.display = '';
+      document.getElementById('tlr-detail-title').innerHTML = '📚 ' + esc(name);
+      document.getElementById('tlr-detail-meta').textContent = 'กำลังโหลด...';
+      document.getElementById('tlr-detail-list').innerHTML =
+        '<div class="empty-state"><div class="spinner" style="margin:0 auto 1rem;"></div></div>';
+
+      try {
+        const params = { subjectId: sid, limit: 500 };
+        // ครู role=user → เฉพาะของตัวเอง
+        if (profile.role !== 'admin' && profile.teacher_id) params.teacherId = profile.teacher_id;
+        const logs = await listTeachingLogs(params);
+        document.getElementById('tlr-detail-meta').textContent = `รวม ${logs.length} บันทึก`;
+        renderDetail(logs);
+      } catch (e) {
+        document.getElementById('tlr-detail-list').innerHTML =
+          `<div class="alert alert-error">โหลด fail: ${esc(e.message)}</div>`;
+      }
+    }
+
+    function renderDetail(logs) {
+      if (logs.length === 0) {
+        document.getElementById('tlr-detail-list').innerHTML = `<div class="empty-state">
+          <i class="fas fa-file-alt" style="font-size:2rem;color:var(--text-3);"></i>
+          <p>ยังไม่มีบันทึกหลังสอนในวิชานี้</p>
+        </div>`;
+        return;
+      }
+      logs.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+      const short = (txt, n) => {
+        const s = String(txt || '');
+        return s.length > n ? s.slice(0, n) + '…' : s;
+      };
+
+      document.getElementById('tlr-detail-list').innerHTML = logs.map(l => `
+        <div class="tlr-item">
+          <div class="tlr-item-head">
+            <div class="tlr-item-date">📅 <b>${esc(formatThaiDate(l.date))}</b>
+              ${l.periods ? `<span class="badge bg-secondary" style="margin-left:.4rem;">คาบ ${esc(l.periods)}</span>` : ''}
+              ${l.teacher_name ? `<span style="font-size:.78rem;color:var(--text-2);margin-left:.5rem;"><i class="fas fa-chalkboard-teacher me-1"></i>${esc(l.teacher_name)}</span>` : ''}
+            </div>
+            <div class="flex no-print" style="gap:.4rem;flex-wrap:wrap;">
+              <a class="btn btn-secondary btn-sm" href="teaching-log.html?subject=${encodeURIComponent(l.subject_id)}&date=${l.date}">
+                <i class="fas fa-edit me-1"></i> แก้ไข
+              </a>
+            </div>
+          </div>
+          <div class="tlr-item-body">
+            ${l.image_url ? `<img src="${esc(l.image_url)}" class="tlr-item-img" alt="ภาพการสอน" onerror="this.style.display='none';" />` : ''}
+            <div class="tlr-item-text">
+              ${l.materials  ? `<div><b style="color:#7c3aed;">🛠 สื่อ:</b> ${esc(short(l.materials, 200))}</div>` : ''}
+              ${l.content    ? `<div><b style="color:#1d4ed8;">📖 เนื้อหา:</b> ${esc(short(l.content, 250))}</div>` : ''}
+              ${l.motivation ? `<div><b style="color:#15803d;">🎯 เสริมแรง:</b> ${esc(short(l.motivation, 200))}</div>` : ''}
+              ${l.results    ? `<div><b style="color:#0891b2;">🏁 ผลการสอน:</b> ${esc(short(l.results, 200))}</div>` : ''}
+              ${l.problems   ? `<div><b style="color:#b91c1c;">⚠️ ปัญหา:</b> ${esc(short(l.problems, 200))}</div>` : ''}
+            </div>
+          </div>
+          <div class="tlr-item-foot no-print">อัปเดตล่าสุด: ${esc((l.updated_at || '').slice(0, 16).replace('T', ' '))}</div>
+        </div>
+      `).join('');
+    }
+
+    function debounce(fn, ms = 200) {
+      let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+    }
+  </script>
+
+  <style>
+    .text-center { text-align: center; }
+    .text-muted { color: var(--text-2); }
+    .tlr-item {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      background: #fff;
+      page-break-inside: avoid;
+    }
+    .tlr-item-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: .5rem;
+      margin-bottom: .75rem;
+      padding-bottom: .5rem;
+      border-bottom: 1px dashed var(--border);
+    }
+    .tlr-item-date {
+      font-size: 1.05rem;
+      color: var(--primary);
+    }
+    .tlr-item-body {
+      display: grid;
+      grid-template-columns: minmax(180px, 220px) 1fr;
+      gap: 1rem;
+      align-items: start;
+    }
+    .tlr-item-img {
+      width: 100%;
+      max-height: 180px;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    .tlr-item-text {
+      display: flex; flex-direction: column; gap: .35rem;
+      font-size: .88rem;
+      line-height: 1.4;
+    }
+    .tlr-item-foot {
+      margin-top: .5rem;
+      font-size: .75rem;
+      color: var(--text-3);
+      text-align: right;
+    }
+    @media (max-width: 640px) {
+      .tlr-item-body { grid-template-columns: 1fr; }
+      .tlr-item-img { max-height: 140px; }
+    }
+    @media print {
+      body { background: #fff !important; font-size: 11px; }
+      #sidebar, #sidebar-overlay, .topbar, .no-print { display: none !important; }
+      #main-content { margin-left: 0 !important; padding: 0 !important; }
+      .card { box-shadow: none !important; border: none !important; padding: 0 !important; }
+      .tlr-item { border: 1px solid #ccc; margin-bottom: .75rem; padding: .5rem; }
+      .tlr-item-img { max-height: 110px; }
+      @page { size: A4; margin: 12mm; }
+    }
+  </style>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "name": "attendance-migration",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "migrate": "node migrate.js",
+    "migrate:dry": "node migrate.js --dry-run",
+    "migrate:full": "node migrate.js --create-auth",
+    "migrate:auth": "node migrate.js --auth-only",
+    "migrate:auth-dry": "node migrate.js --auth-only --dry-run",
+    "setup-admin": "node setup-admin.js",
+    "add-user": "node add-user.js",
+    "migrate-images": "node migrate-images.js",
+    "migrate-images:dry": "node migrate-images.js --dry-run"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "csv-parse": "^5.5.3",
+    "dotenv": "^16.3.1"
+  }
+}

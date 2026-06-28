@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#1a237e" />
+  <title>ประวัติการเช็คชื่อ — รายงานการเข้าเรียน</title>
+  <link rel="icon" href="https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DLEchopSbfi&sz=w128" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div id="alert-area"></div>
+
+  <div class="card no-print">
+    <div class="card-header" style="flex-wrap:wrap;gap:.6rem;">
+      <a class="btn btn-secondary btn-sm" href="reports.html"><i class="fas fa-arrow-left"></i> กลับ</a>
+      <div class="flex-1">
+        <div class="card-title" id="sh-subject-name">📚 ประวัติการเช็คชื่อ</div>
+        <div class="card-subtitle" id="sh-subject-meta" style="color:var(--text-2);font-size:.85rem;"></div>
+      </div>
+      <div class="flex" style="gap:.4rem;flex-wrap:wrap;">
+        <a class="btn btn-primary btn-sm" id="btn-check-today">
+          <i class="fas fa-clipboard-check me-1"></i> เช็คชื่อวันนี้
+        </a>
+        <button class="btn btn-success btn-sm" id="btn-print">
+          <i class="fas fa-print me-1"></i> ปริ้นรายงาน
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- หัวรายงาน (เห็นเฉพาะตอนปริ้น) -->
+  <div class="print-only" id="sh-print-header" style="display:none;">
+    <h2 style="text-align:center;margin:0 0 .3rem;">รายงานการเช็คชื่อรายวิชา</h2>
+    <div style="text-align:center;font-size:14px;color:#555;">วิทยาลัยการอาชีพแกลง</div>
+    <table style="width:100%;margin-top:.5rem;font-size:13px;">
+      <tr>
+        <td><b>รายวิชา:</b> <span id="sh-print-subject"></span></td>
+        <td><b>ครูผู้สอน:</b> <span id="sh-print-teacher"></span></td>
+      </tr>
+      <tr>
+        <td><b>ห้องเรียน:</b> <span id="sh-print-class"></span></td>
+        <td><b>จำนวนชั่วโมง:</b> <span id="sh-print-hours"></span></td>
+      </tr>
+      <tr>
+        <td colspan="2"><b>ภาคการศึกษา:</b> <span id="sh-print-period"></span></td>
+      </tr>
+    </table>
+    <hr style="margin:.5rem 0;">
+  </div>
+
+  <div class="card">
+    <div id="sh-content">
+      <div class="empty-state">
+        <div class="spinner" style="margin:0 auto 1rem;"></div>
+        <p>กำลังโหลด...</p>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth } from './js/auth.js';
+    import { initLayout } from './js/layout.js';
+    import { getAttendanceMatrix, getAttendanceDates, getAttendanceSummary } from './js/api.js';
+    import { supabase } from './js/supabase-client.js';
+    import { showAlert, formatThaiDate, esc } from './js/utils.js';
+
+    const profile = await requireAuth();
+    if (!profile) throw new Error('not authed');
+    initLayout(profile, 'reports', { title: 'ประวัติการเช็คชื่อ', icon: 'fa-history' });
+
+    // params
+    const params = new URLSearchParams(location.search);
+    const subjectId = params.get('subject');
+    const classId   = params.get('class');
+    const autoprint = params.get('autoprint') === '1';
+    if (!subjectId) {
+      document.getElementById('sh-content').innerHTML = '<div class="alert alert-error">ไม่ระบุรหัสวิชา</div>';
+      throw new Error('no subject');
+    }
+
+    // load
+    try {
+      // ดึงข้อมูลวิชา
+      const { data: subj } = await supabase
+        .from('subjects')
+        .select('subject_id, subject_name, major, course_type, total_hours, start_date, end_date')
+        .eq('subject_id', subjectId)
+        .single();
+
+      // วันที่ default = วงกว้าง (start - end ของวิชา หรือ 2020-2030)
+      const dateFrom = subj?.start_date || '2020-01-01';
+      const dateTo   = subj?.end_date || '2030-12-31';
+
+      // โหลด matrix + dates + summary (ใช้รอบ 1)
+      const [matrix, dates, summary] = await Promise.all([
+        getAttendanceMatrix({ subjectId, dateFrom, dateTo, classId, round: 1 }),
+        getAttendanceDates({ subjectId, dateFrom, dateTo, round: 1 }),
+        getAttendanceSummary({ subjectId, dateFrom, dateTo, classId, round: 1 })
+      ]);
+
+      // header
+      document.getElementById('sh-subject-name').innerHTML = '📚 ' + esc(subj?.subject_name || subjectId);
+      const ctMap = { normal:'ปกติ', upskill:'Upskill', short:'ระยะสั้น' };
+      const ctLabel = ctMap[subj?.course_type] || subj?.course_type || '';
+      const dateRange = (subj?.start_date && subj?.end_date)
+        ? `${formatThaiDate(subj.start_date).split(' ').slice(0,3).join(' ')} - ${formatThaiDate(subj.end_date).split(' ').slice(0,3).join(' ')}`
+        : '';
+      document.getElementById('sh-subject-meta').innerHTML =
+        `📅 ${esc(dateRange)} · ⏱ ${subj?.total_hours || '-'} ชม. · นักเรียน <b>${summary.length}</b> คน · เช็คแล้ว <b>${dates.length}</b> วัน` +
+        (ctLabel ? ` · ${esc(ctLabel)}` : '');
+
+      // print header
+      const teacherName = profile.teacher_full_name || profile.full_name || profile.email;
+      document.getElementById('sh-print-subject').textContent = subj?.subject_name || '';
+      document.getElementById('sh-print-teacher').textContent = teacherName;
+      document.getElementById('sh-print-class').textContent = classId || '-';
+      document.getElementById('sh-print-hours').textContent = (subj?.total_hours || '-') + ' ชม.';
+      document.getElementById('sh-print-period').textContent = dateRange;
+
+      // check-today button
+      document.getElementById('btn-check-today').href =
+        `attendance-check.html?subject=${encodeURIComponent(subjectId)}` + (classId ? `&class=${encodeURIComponent(classId)}` : '');
+
+      renderHistory(matrix, dates, summary);
+
+      if (autoprint) {
+        setTimeout(() => window.print(), 600);
+      }
+    } catch (e) {
+      document.getElementById('sh-content').innerHTML = `<div class="alert alert-error">โหลด fail: ${esc(e.message)}</div>`;
+    }
+
+    document.getElementById('btn-print').onclick = () => window.print();
+
+    function renderHistory(matrix, dates, summary) {
+      const box = document.getElementById('sh-content');
+      if (summary.length === 0) {
+        box.innerHTML = `<div class="empty-state">
+          <i class="fas fa-users" style="font-size:2rem;color:var(--text-3);"></i>
+          <p>ยังไม่มีนักเรียนลงทะเบียนวิชานี้</p>
+        </div>`;
+        return;
+      }
+      if (dates.length === 0) {
+        box.innerHTML = `<div class="empty-state">
+          <i class="fas fa-clipboard" style="font-size:2rem;color:var(--text-3);"></i>
+          <p>ยังไม่มีการเช็คชื่อในวิชานี้</p>
+        </div>`;
+        return;
+      }
+
+      // map summary by student_id
+      const sumById = Object.fromEntries(summary.map(s => [s.student_id, s]));
+
+      // map matrix by student_id
+      const matrixById = {};
+      matrix.forEach(m => { matrixById[m.student_id] = m.cells || {}; });
+
+      // students list — เรียงตาม student_id
+      const students = summary.slice().sort((a, b) => (a.student_id || '').localeCompare(b.student_id || ''));
+
+      // helpers
+      const THAI_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+      const fmtShort = (iso) => {
+        const dd = parseInt(iso.slice(8,10), 10);
+        const mm = parseInt(iso.slice(5,7), 10);
+        const yy = parseInt(iso.slice(0,4), 10) + 543;
+        return `${dd}<br>${THAI_MONTHS[mm-1]}<br>${yy}`;
+      };
+      const fmtCell = (st) => {
+        if (!st) return '<span class="sh-cell sh-cell--empty">–</span>';
+        if (st === 'มา')    return '<span class="sh-cell sh-cell--present" title="มา">✓</span>';
+        if (st === 'สาย')   return '<span class="sh-cell sh-cell--late" title="มาสาย">สาย</span>';
+        if (st === 'ลาป่วย') return '<span class="sh-cell sh-cell--sick" title="ลาป่วย">ลาป่วย</span>';
+        if (st === 'ลากิจ')  return '<span class="sh-cell sh-cell--personal" title="ลากิจ">ลากิจ</span>';
+        if (st === 'ขาด')    return '<span class="sh-cell sh-cell--absent" title="ขาดเรียน">ขาด</span>';
+        return '<span class="sh-cell">' + esc(st) + '</span>';
+      };
+
+      // date headers (multi-line)
+      const dateHeaders = dates.map(d => `
+        <th class="sh-date-th">
+          <a href="attendance-check.html?subject=${encodeURIComponent(subjectId)}${classId ? '&class=' + encodeURIComponent(classId) : ''}&date=${d}"
+             title="คลิกเพื่อแก้ไขการเช็คชื่อวันนี้"
+             style="color:inherit;text-decoration:none;">
+            ${fmtShort(d)}
+          </a>
+        </th>
+      `).join('');
+
+      // rows
+      const rows = students.map((s, idx) => {
+        const cells = matrixById[s.student_id] || {};
+        const rate = +s.pct_present || 0;
+        const rateCls = rate >= 80 ? 'ok' : rate >= 60 ? 'mid' : 'low';
+        return `
+          <tr>
+            <td class="t-center">${idx + 1}</td>
+            <td class="sh-name-td"><b>${esc(s.full_name)}</b></td>
+            ${dates.map(d => `<td class="sh-date-cell">${fmtCell(cells[d])}</td>`).join('')}
+            <td class="sh-num-td t-st-present">${s.cnt_present}</td>
+            <td class="sh-num-td t-st-late">${s.cnt_late}</td>
+            <td class="sh-num-td t-st-sick">${s.cnt_sick}</td>
+            <td class="sh-num-td t-st-personal">${s.cnt_leave}</td>
+            <td class="sh-num-td t-st-absent">${s.cnt_absent}</td>
+            <td class="sh-num-td"><b>${s.cnt_total}</b></td>
+            <td class="sh-num-td"><b class="t-rate-pct ${rateCls}">${rate}%</b></td>
+          </tr>
+        `;
+      }).join('');
+
+      box.innerHTML = `
+        <div class="card-subtitle no-print" style="color:var(--text-2);font-size:.85rem;padding:0 0 .5rem;">
+          <i class="fas fa-info-circle me-1"></i>
+          คลิกที่หัวคอลัมน์ "วันที่" เพื่อแก้ไขการเช็คชื่อของวันนั้น —
+          <span style="color:#15803d;font-weight:600;">✓ = มา</span> ·
+          <span style="color:#b45309;font-weight:600;">สาย</span> ·
+          <span style="color:#7c3aed;font-weight:600;">ลาป่วย</span> ·
+          <span style="color:#1d4ed8;font-weight:600;">ลากิจ</span> ·
+          <span style="color:#b91c1c;font-weight:600;">ขาด</span>
+        </div>
+        <div class="table-wrapper sh-table-wrap" style="overflow-x:auto;">
+          <table class="table sh-table">
+            <thead>
+              <tr>
+                <th class="t-center" rowspan="2" style="width:42px;">ลำดับ</th>
+                <th rowspan="2" style="min-width:160px;">ชื่อ-สกุล</th>
+                <th colspan="${dates.length}" class="t-center">วันที่เช็คชื่อ <small style="opacity:.7;">(${dates.length} วัน)</small></th>
+                <th colspan="6" class="t-center">สรุป</th>
+                <th rowspan="2" class="sh-num-th">% เข้าแถว</th>
+              </tr>
+              <tr>
+                ${dateHeaders}
+                <th class="sh-num-th t-st-present">มา</th>
+                <th class="sh-num-th t-st-late">สาย</th>
+                <th class="sh-num-th t-st-sick">ลาป่วย</th>
+                <th class="sh-num-th t-st-personal">ลากิจ</th>
+                <th class="sh-num-th t-st-absent">ขาด</th>
+                <th class="sh-num-th">รวม</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+    }
+  </script>
+
+  <style>
+    /* Matrix table */
+    .sh-table { border-collapse: collapse; font-size: .82rem; }
+    .sh-table th, .sh-table td {
+      border: 1px solid var(--border);
+      padding: 4px 6px;
+      vertical-align: middle;
+    }
+    .sh-table thead { background: #f0f2f5; }
+    .sh-date-th { text-align: center; min-width: 38px; font-size: .68rem; line-height: 1.15; vertical-align: middle; }
+    .sh-date-cell { text-align: center; padding: 2px !important; min-width: 38px; }
+    .sh-name-td { white-space: nowrap; }
+    .sh-num-td, .sh-num-th { text-align: center; min-width: 38px; font-variant-numeric: tabular-nums; }
+    .t-center { text-align: center; }
+    .t-st-present  { color: #15803d; }
+    .t-st-late     { color: #b45309; }
+    .t-st-sick     { color: #7c3aed; }
+    .t-st-personal { color: #1d4ed8; }
+    .t-st-absent   { color: #b91c1c; }
+    .t-rate-pct.ok  { color: #15803d; }
+    .t-rate-pct.mid { color: #b45309; }
+    .t-rate-pct.low { color: #b91c1c; }
+
+    /* Cell styles */
+    .sh-cell {
+      display: inline-block; min-width: 30px;
+      padding: 1px 4px; font-size: .72rem;
+      font-weight: 600; border-radius: 4px;
+    }
+    .sh-cell--present  { color: #15803d; }
+    .sh-cell--late     { background: #fff3e0; color: #b45309; }
+    .sh-cell--sick     { background: #ede9fe; color: #7c3aed; }
+    .sh-cell--personal { background: #dbeafe; color: #1d4ed8; }
+    .sh-cell--absent   { background: #fee2e2; color: #b91c1c; }
+    .sh-cell--empty    { color: #cbd5e1; }
+
+    /* Print */
+    @media print {
+      body { background: #fff !important; font-size: 11px; }
+      #sidebar, #sidebar-overlay, .topbar, .no-print { display: none !important; }
+      #main-content { margin-left: 0 !important; padding: 0 !important; }
+      .print-only { display: block !important; }
+      .card { box-shadow: none !important; border: none !important; padding: 0 !important; margin: 0 !important; }
+      .sh-table { font-size: 10px; page-break-inside: auto; }
+      .sh-table tr { page-break-inside: avoid; page-break-after: auto; }
+      .sh-date-th { font-size: 9px; }
+      .sh-cell { font-size: 9px; }
+      @page { size: A4 landscape; margin: 10mm; }
+    }
+    .print-only { display: none; }
+  </style>
+</body>
+</html>

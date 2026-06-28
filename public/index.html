@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="theme-color" content="#1a237e" />
+  <title>ระบบเช็คชื่อนักเรียน</title>
+  <link rel="icon" href="https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DLEchopSbfi&sz=w128" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div class="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">กำลังพาคุณไปยังหน้าที่ถูกต้อง...</div>
+  </div>
+  <script type="module">
+    import { getSession } from './js/auth.js';
+    const session = await getSession();
+    window.location.href = session ? 'attendance.html' : 'login.html';
+  </script>
+</body>
+</html>

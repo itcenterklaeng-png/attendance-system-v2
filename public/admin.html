@@ -1,0 +1,1826 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#1a237e" />
+  <title>จัดการระบบ — ระบบเช็คชื่อนักเรียน</title>
+  <link rel="icon" href="https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DLEchopSbfi&sz=w128" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div id="alert-area"></div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">⚙️ จัดการระบบ</div>
+    </div>
+
+    <div class="tabs tabs-admin" id="admin-tabs">
+      <button class="tab active" data-admin-tab="teachers">👨‍🏫 ครู</button>
+      <button class="tab" data-admin-tab="students">👥 นักเรียน</button>
+      <button class="tab" data-admin-tab="subjects">📚 วิชา</button>
+      <button class="tab" data-admin-tab="classes">🏫 ห้อง</button>
+      <button class="tab" data-admin-tab="enrollments">📝 ลงทะเบียน</button>
+      <button class="tab" data-admin-tab="users">🔐 ผู้ใช้</button>
+      <button class="tab" data-admin-tab="logs">📋 Log</button>
+    </div>
+
+    <div id="admin-content">
+      <div class="empty-state"><div class="spinner" style="margin:0 auto;"></div></div>
+    </div>
+  </div>
+
+  <!-- Universal Modal -->
+  <div class="modal-bg" id="modal-bg" style="display:none;">
+    <div class="modal-card">
+      <button class="modal-close" id="modal-close">&times;</button>
+      <div class="modal-title" id="modal-title">แก้ไข</div>
+      <div id="modal-body"></div>
+      <div class="modal-footer" style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);">
+        <button class="btn btn-secondary" id="modal-cancel">ยกเลิก</button>
+        <button class="btn btn-primary" id="modal-save"><i class="fas fa-save me-1"></i> บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth } from './js/auth.js';
+    import { initLayout } from './js/layout.js';
+    import { supabase } from './js/supabase-client.js';
+    import {
+      listTeachers, upsertTeacher, deleteTeacher,
+      listStudents, upsertStudent, deleteStudent,
+      listClasses, listClassesStats, upsertClass, deleteClass,
+      listSubjects, listSubjectsStats, upsertSubject, deleteSubject,
+      getSubjectTeachers, setSubjectTeachers, getAllSubjectTeacherMap,
+      getSubjectScheduleAll, saveSubjectSchedule,
+      bulkEnroll, bulkUnenroll, getEnrollmentsOfClass,
+      listAllEnrollments, getClassEnrollmentDetail,
+      getSubjectScheduleCounts, deleteEnrollment,
+      listUsers, updateUserRole
+    } from './js/api.js';
+    import { showAlert, esc, formatThaiDate } from './js/utils.js';
+
+    const profile = await requireAuth();
+    if (!profile) throw new Error('not authed');
+    if (profile.role !== 'admin') {
+      alert('หน้านี้สำหรับ admin เท่านั้น');
+      window.location.href = 'home.html';
+      throw new Error('not admin');
+    }
+    initLayout(profile, 'admin', { title: 'จัดการระบบ', icon: 'fa-cog' });
+
+    // ===== caches =====
+    const ctx = {
+      teachers: [],
+      classes: [],
+      teachersDeptFilter: '',
+      studentsClassFilter: '',
+      studentsSearch: ''
+    };
+
+    // ===== Tabs =====
+    let currentTab = 'teachers';
+    document.querySelectorAll('#admin-tabs .tab').forEach(tab => {
+      tab.addEventListener('click', async () => {
+        document.querySelectorAll('#admin-tabs .tab').forEach(t => t.classList.toggle('active', t === tab));
+        currentTab = tab.dataset.adminTab;
+        document.getElementById('admin-content').innerHTML = '<div class="empty-state"><div class="spinner" style="margin:0 auto;"></div></div>';
+        await loadCurrentTab();
+      });
+    });
+
+    async function loadCurrentTab() {
+      try {
+        if (currentTab === 'teachers')    await renderTeachers();
+        else if (currentTab === 'students')    await renderStudents();
+        else if (currentTab === 'subjects')    await renderSubjects();
+        else if (currentTab === 'classes')     await renderClasses();
+        else if (currentTab === 'enrollments') await renderEnrollments();
+        else if (currentTab === 'users')       await renderUsers();
+        else if (currentTab === 'logs')        await renderLogs();
+      } catch (e) {
+        document.getElementById('admin-content').innerHTML = `<div class="alert alert-error">โหลด fail: ${esc(e.message)}</div>`;
+      }
+    }
+
+    // ===== Modal =====
+    const modalBg = document.getElementById('modal-bg');
+    let modalOnSave = null;
+    function openModal(title, bodyHtml, onSave, opts = {}) {
+      document.getElementById('modal-title').textContent = title;
+      document.getElementById('modal-body').innerHTML = bodyHtml;
+      modalOnSave = onSave;
+      modalBg.style.display = 'flex';
+      document.body.classList.add('modal-open');
+      // optional: hide save button
+      document.getElementById('modal-save').style.display = opts.readonly ? 'none' : '';
+      document.getElementById('modal-cancel').textContent = opts.readonly ? 'ปิด' : 'ยกเลิก';
+    }
+    function closeModal() {
+      modalBg.style.display = 'none';
+      document.body.classList.remove('modal-open');
+      modalOnSave = null;
+    }
+    document.getElementById('modal-close').onclick = closeModal;
+    document.getElementById('modal-cancel').onclick = closeModal;
+    document.getElementById('modal-save').onclick = async () => {
+      if (!modalOnSave) return;
+      const btn = document.getElementById('modal-save');
+      btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> กำลังบันทึก...';
+      try {
+        await modalOnSave();
+        closeModal();
+        await loadCurrentTab();
+        showAlert('บันทึกสำเร็จ', 'success');
+      } catch (e) {
+        showAlert('บันทึก fail: ' + e.message, 'error', 0);
+      } finally {
+        btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i> บันทึก';
+      }
+    };
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modalBg.style.display === 'flex') closeModal(); });
+
+    // ============================================
+    // 1. TEACHERS
+    // ============================================
+    async function renderTeachers() {
+      const teachers = await listTeachers({ limit: 500 });
+      ctx.teachers = teachers;
+
+      const depts = Array.from(new Set(teachers.map(t => (t.department || '').trim()).filter(Boolean))).sort();
+      const cur = ctx.teachersDeptFilter;
+
+      document.getElementById('admin-content').innerHTML = `
+        <div class="flex mb-4 gap-2" style="justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:.75rem;">
+          <div class="flex gap-2" style="align-items:center;flex-wrap:wrap;">
+            <button class="btn btn-primary" id="btn-add-teacher"><i class="fas fa-plus me-1"></i> เพิ่มครู</button>
+            <select id="teachers-filter-dept" class="form-control form-select form-select-sm" style="min-width:180px;">
+              <option value="">ทุกแผนก</option>
+              ${depts.map(d => `<option value="${esc(d)}" ${d === cur ? 'selected' : ''}>${esc(d)}</option>`).join('')}
+            </select>
+            <input id="teachers-search" class="form-control form-control-sm" placeholder="🔍 รหัส/ชื่อ/email" style="width:220px;" />
+          </div>
+          <div class="text-muted" id="teachers-count" style="font-size:.9rem;"></div>
+        </div>
+        <div class="table-wrapper" style="overflow-x:auto;">
+          <table class="table table-hover" style="font-size:.9rem;">
+            <thead style="background:#f0f2f5;">
+              <tr><th>รหัส</th><th>ชื่อ-สกุล</th><th>แผนก</th><th>เบอร์</th><th>อีเมล</th><th>สถานะ</th><th></th></tr>
+            </thead>
+            <tbody id="teachers-tbody"></tbody>
+          </table>
+        </div>
+      `;
+      document.getElementById('btn-add-teacher').onclick = () => openTeacherForm(null);
+      document.getElementById('teachers-filter-dept').onchange = (e) => { ctx.teachersDeptFilter = e.target.value; rerenderTeacherRows(); };
+      document.getElementById('teachers-search').addEventListener('input', debounce(rerenderTeacherRows, 200));
+      rerenderTeacherRows();
+    }
+    function rerenderTeacherRows() {
+      const all = ctx.teachers;
+      const f = ctx.teachersDeptFilter;
+      const q = (document.getElementById('teachers-search')?.value || '').toLowerCase();
+      let list = f ? all.filter(t => (t.department || '').trim() === f) : all;
+      if (q) list = list.filter(t =>
+        (t.teacher_id || '').toLowerCase().includes(q) ||
+        (t.full_name || '').toLowerCase().includes(q) ||
+        (t.email || '').toLowerCase().includes(q)
+      );
+      const tbody = document.getElementById('teachers-tbody');
+      if (!tbody) return;
+      tbody.innerHTML = list.length === 0
+        ? `<tr><td colspan="7" class="text-muted" style="text-align:center;padding:1rem;">ไม่พบข้อมูล</td></tr>`
+        : list.map(t => `
+            <tr>
+              <td><code>${esc(t.teacher_id)}</code></td>
+              <td>${esc(t.full_name)}</td>
+              <td>${esc(t.department || '-')}</td>
+              <td>${esc(t.phone || '-')}</td>
+              <td>${esc(t.email || '-')}</td>
+              <td>${badge(t.status)}</td>
+              <td>
+                <div class="d-flex gap-1">
+                  <button class="btn btn-sm btn-secondary" data-act="edit" data-id="${esc(t.teacher_id)}"><i class="fas fa-edit"></i></button>
+                  <button class="btn btn-sm btn-danger" data-act="del" data-id="${esc(t.teacher_id)}"><i class="fas fa-trash"></i></button>
+                </div>
+              </td>
+            </tr>
+          `).join('');
+      document.getElementById('teachers-count').innerHTML = f || q
+        ? `แสดง <b>${list.length}</b> จาก <b>${all.length}</b> คน`
+        : `ทั้งหมด <b>${all.length}</b> คน`;
+      tbody.querySelectorAll('button').forEach(b => {
+        b.onclick = async () => {
+          const id = b.dataset.id;
+          if (b.dataset.act === 'edit') openTeacherForm(all.find(x => x.teacher_id === id));
+          else if (b.dataset.act === 'del') {
+            if (!confirm(`ลบครู ${id}?`)) return;
+            try { await deleteTeacher(id); showAlert('ลบแล้ว', 'success'); await renderTeachers(); }
+            catch (e) { showAlert('ลบ fail: ' + e.message, 'error', 0); }
+          }
+        };
+      });
+    }
+    function openTeacherForm(t) {
+      const r = t || {};
+      const isEdit = !!t;
+      openModal(isEdit ? '✏️ แก้ไขข้อมูลครู' : '➕ เพิ่มครู', `
+        <div class="row g-2">
+          <div class="col-12 col-md-4"><label class="form-label fw-bold">รหัสครู *</label><input id="t-id" class="form-control" value="${esc(r.teacher_id || '')}" ${isEdit ? 'readonly' : ''} required /></div>
+          <div class="col-12 col-md-8"><label class="form-label fw-bold">ชื่อ-สกุล *</label><input id="t-name" class="form-control" value="${esc(r.full_name || '')}" required /></div>
+          <div class="col-12 col-md-6"><label class="form-label fw-bold">แผนก</label><input id="t-dept" class="form-control" value="${esc(r.department || '')}" /></div>
+          <div class="col-12 col-md-6"><label class="form-label fw-bold">เบอร์โทร</label><input id="t-phone" class="form-control" placeholder="0XXXXXXXXX" value="${esc(r.phone || '')}" /></div>
+          <div class="col-12 col-md-8"><label class="form-label fw-bold">อีเมล (Gmail)</label><input id="t-email" type="email" class="form-control" value="${esc(r.email || '')}" /></div>
+          <div class="col-12 col-md-4"><label class="form-label fw-bold">สถานะ</label><select id="t-status" class="form-control form-select"><option value="active" ${r.status === 'active' || !r.status ? 'selected' : ''}>active</option><option value="inactive" ${r.status === 'inactive' ? 'selected' : ''}>inactive</option></select></div>
+        </div>
+      `, async () => {
+        const row = {
+          teacher_id: document.getElementById('t-id').value.trim(),
+          full_name: document.getElementById('t-name').value.trim(),
+          department: document.getElementById('t-dept').value.trim() || null,
+          phone: document.getElementById('t-phone').value.trim() || null,
+          email: document.getElementById('t-email').value.trim() || null,
+          status: document.getElementById('t-status').value
+        };
+        if (!row.teacher_id || !row.full_name) throw new Error('กรุณากรอก รหัส + ชื่อ-สกุล');
+        await upsertTeacher(row);
+      });
+    }
+
+    // ============================================
+    // 2. STUDENTS — Tree view (major → level → year → room)
+    // ============================================
+    async function renderStudents() {
+      const [students, classes] = await Promise.all([
+        listStudents({ limit: 5000 }),
+        listClasses()
+      ]);
+      ctx.classes = classes;
+      const classMap = Object.fromEntries(classes.map(c => [c.class_id, c]));
+
+      // group
+      const activeStu = students.filter(s => s.status === 'active');
+      const groups = {};   // major → level → year → room
+      activeStu.forEach(s => {
+        const cls = classMap[s.class_id] || { major: '—', level: '—', year: 0, room: 0 };
+        const m = cls.major || '—';
+        const lv = cls.level || '—';
+        const y = cls.year || 0;
+        const r = cls.room || 0;
+        ((((groups[m] ??= {})[lv] ??= {})[y] ??= {})[r] ??= []).push(s);
+      });
+
+      const totalCount = activeStu.length;
+      const majorList = Object.keys(groups).sort();
+
+      const toolbar = `
+        <div class="flex mb-4 gap-2" style="flex-wrap:wrap;align-items:center;margin-bottom:.75rem;">
+          <button class="btn btn-primary" id="btn-add-student"><i class="fas fa-plus me-1"></i> เพิ่มนักเรียน</button>
+          <span class="text-muted" style="margin-left:auto;font-size:.9rem;">
+            รวม <b>${totalCount}</b> คน (active) · <b>${majorList.length}</b> สาขาวิชา
+          </span>
+        </div>
+      `;
+
+      if (majorList.length === 0) {
+        document.getElementById('admin-content').innerHTML = toolbar +
+          '<div class="empty-state"><i class="fas fa-user-graduate" style="font-size:2rem;color:var(--text-3);"></i><p>ยังไม่มีนักเรียนในระบบ</p></div>';
+        document.getElementById('btn-add-student').onclick = () => openStudentForm(null);
+        return;
+      }
+
+      const tree = majorList.map(major => {
+        const levels = Object.keys(groups[major]).sort();
+        const majorTotal = levels.reduce((sum, lv) => sum + Object.values(groups[major][lv]).reduce((s2, ys) => s2 + Object.values(ys).reduce((s3, rs) => s3 + rs.length, 0), 0), 0);
+
+        const levelHtml = levels.map(lv => {
+          const years = Object.keys(groups[major][lv]).sort((a, b) => +a - +b);
+          const lvTotal = years.reduce((sum, y) => sum + Object.values(groups[major][lv][y]).reduce((s, rs) => s + rs.length, 0), 0);
+          const yearHtml = years.map(y => {
+            const rooms = Object.keys(groups[major][lv][y]).sort((a, b) => +a - +b);
+            const yearTotal = rooms.reduce((s, r) => s + groups[major][lv][y][r].length, 0);
+            const roomHtml = rooms.map(r => {
+              const list = groups[major][lv][y][r];
+              const roomLabel = (r > 0) ? `กลุ่มที่ ${r}` : 'ไม่ระบุกลุ่ม';
+              return `
+                <div class="stu-group-row" data-major="${esc(major)}" data-level="${esc(lv)}" data-year="${y}" data-room="${r}">
+                  <span><i class="fas fa-users me-2" style="color:#42a5f5;"></i>ปี ${y} / ${r > 0 ? r : '—'} <span class="text-muted" style="font-weight:400;font-size:.85rem;">· ${roomLabel}</span></span>
+                  <span class="stu-count-badge">${list.length} คน</span>
+                  <i class="fas fa-chevron-right text-muted" style="margin-left:.5rem;"></i>
+                </div>
+              `;
+            }).join('');
+            return `
+              <div class="stu-year-head">
+                <span><i class="fas fa-user-graduate me-2" style="color:var(--primary);"></i>ชั้นปีที่ ${y}</span>
+                <span class="text-muted" style="font-size:.85rem;">(${yearTotal} คน · ${rooms.length} กลุ่ม)</span>
+              </div>
+              <div class="stu-group-list">${roomHtml}</div>
+            `;
+          }).join('');
+          return `
+            <details class="stu-level" open>
+              <summary><b>${esc(lv)}</b> <span class="text-muted">(${lvTotal} คน)</span></summary>
+              <div class="stu-year-list">${yearHtml}</div>
+            </details>
+          `;
+        }).join('');
+
+        return `
+          <details class="stu-major card" open style="margin-bottom:.75rem;">
+            <summary style="cursor:pointer;padding:.75rem 1rem;font-weight:600;font-size:1.05rem;">
+              <i class="fas fa-graduation-cap me-2" style="color:#0d47a1;"></i>
+              ${esc(major)} <span class="text-muted" style="font-weight:400;">(${majorTotal} คน)</span>
+            </summary>
+            <div style="padding:0 1rem 1rem;">${levelHtml}</div>
+          </details>
+        `;
+      }).join('');
+
+      document.getElementById('admin-content').innerHTML = toolbar + `<div class="stu-tree">${tree}</div>`;
+      document.getElementById('btn-add-student').onclick = () => openStudentForm(null);
+
+      // bind group rows
+      document.querySelectorAll('.stu-group-row').forEach(row => {
+        row.onclick = () => openStudentsInGroupModal({
+          major: row.dataset.major,
+          level: row.dataset.level,
+          year: +row.dataset.year,
+          room: +row.dataset.room,
+          list: groups[row.dataset.major][row.dataset.level][row.dataset.year][row.dataset.room]
+        });
+      });
+    }
+
+    function openStudentsInGroupModal({ major, level, year, room, list }) {
+      const roomLabel = room > 0 ? ` / ${room}` : '';
+      const html = `
+        <div style="margin-bottom:.75rem;color:var(--text-2);">
+          ${esc(major)} · ${esc(level)} ปี ${year}${roomLabel} · <b>${list.length}</b> คน
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="table table-hover" style="font-size:.85rem;">
+            <thead style="background:#f0f2f5;">
+              <tr><th>รหัส</th><th>ชื่อ-สกุล</th><th>ห้อง</th><th></th></tr>
+            </thead>
+            <tbody>
+              ${list.map(s => `
+                <tr>
+                  <td><code>${esc(s.student_id)}</code></td>
+                  <td>${esc(s.full_name)}</td>
+                  <td><code>${esc(s.class_id || '-')}</code></td>
+                  <td>
+                    <div class="d-flex gap-1">
+                      <button class="btn btn-sm btn-secondary" data-act="edit" data-id="${esc(s.student_id)}"><i class="fas fa-edit"></i></button>
+                      <button class="btn btn-sm btn-danger" data-act="del" data-id="${esc(s.student_id)}"><i class="fas fa-trash"></i></button>
+                    </div>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+      openModal(`👥 รายชื่อนักเรียน — ${major} ${level} ปี ${year}${roomLabel}`, html, null, { readonly: true });
+      document.querySelectorAll('#modal-body button').forEach(b => {
+        b.onclick = async () => {
+          const id = b.dataset.id;
+          const s = list.find(x => x.student_id === id);
+          if (b.dataset.act === 'edit') { closeModal(); openStudentForm(s); }
+          else if (b.dataset.act === 'del') {
+            if (!confirm(`ลบนักเรียน ${id}?`)) return;
+            try { await deleteStudent(id); showAlert('ลบแล้ว', 'success'); closeModal(); await renderStudents(); }
+            catch (e) { showAlert('ลบ fail: ' + e.message, 'error', 0); }
+          }
+        };
+      });
+    }
+
+    function openStudentForm(s) {
+      const r = s || {};
+      const opts = '<option value="">— ไม่มี —</option>' + ctx.classes.map(c =>
+        `<option value="${esc(c.class_id)}" ${r.class_id === c.class_id ? 'selected' : ''}>${esc(c.class_id)} (${esc(c.major)} ${esc(c.level)}ปี${esc(c.year)}/${esc(c.room)})</option>`
+      ).join('');
+      openModal(s ? '✏️ แก้ไขนักเรียน' : '➕ เพิ่มนักเรียน', `
+        <div class="row g-2">
+          <div class="col-12 col-md-4"><label class="form-label fw-bold">รหัสนักเรียน *</label><input id="s-id" class="form-control" value="${esc(r.student_id || '')}" ${s ? 'readonly' : ''} required /></div>
+          <div class="col-12 col-md-8"><label class="form-label fw-bold">ชื่อ-สกุล *</label><input id="s-name" class="form-control" value="${esc(r.full_name || '')}" required /></div>
+          <div class="col-12 col-md-8"><label class="form-label fw-bold">ห้องเรียน</label><select id="s-class" class="form-control form-select">${opts}</select></div>
+          <div class="col-12 col-md-4"><label class="form-label fw-bold">สถานะ</label><select id="s-status" class="form-control form-select"><option value="active" ${r.status === 'active' || !r.status ? 'selected' : ''}>active</option><option value="inactive" ${r.status === 'inactive' ? 'selected' : ''}>inactive</option></select></div>
+        </div>
+      `, async () => {
+        const row = {
+          student_id: document.getElementById('s-id').value.trim(),
+          full_name: document.getElementById('s-name').value.trim(),
+          class_id: document.getElementById('s-class').value || null,
+          status: document.getElementById('s-status').value
+        };
+        if (!row.student_id || !row.full_name) throw new Error('กรุณากรอก รหัส + ชื่อ-สกุล');
+        await upsertStudent(row);
+      });
+    }
+
+    // ============================================
+    // 3. SUBJECTS (with stats + filter, ตาม v1)
+    // ============================================
+    async function renderSubjects() {
+      const [subjects, teacherMap] = await Promise.all([
+        listSubjectsStats(),
+        getAllSubjectTeacherMap()
+      ]);
+      if (ctx.teachers.length === 0) ctx.teachers = await listTeachers({ limit: 500 });
+      const teachers = ctx.teachers;
+      const teacherNameMap = Object.fromEntries(teachers.map(t => [t.teacher_id, t.full_name]));
+
+      // ⭐ Natural sort ตาม subject_id (1, 2, 3, 10, 100 — ไม่ใช่ 1, 10, 100, 2, 3)
+      subjects.sort((a, b) =>
+        String(a.subject_id || '').localeCompare(String(b.subject_id || ''), undefined, { numeric: true, sensitivity: 'base' })
+      );
+
+      // stats
+      const totalSubjects = subjects.length;
+      const totalTeacherLinks = subjects.reduce((s, x) => s + (x.teacher_count || 0), 0);
+      const totalScheduledDays = subjects.reduce((s, x) => s + (x.schedule_days || 0), 0);
+
+      // filter options
+      const majors = Array.from(new Set(subjects.map(s => (s.major || '').trim()).filter(Boolean))).sort();
+      const teacherOpts = teachers.slice().sort((a,b) => (a.full_name || '').localeCompare(b.full_name || '', 'th'));
+
+      document.getElementById('admin-content').innerHTML = `
+        <div class="flex mb-4 gap-2" style="justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:.75rem;">
+          <div class="flex gap-2" style="flex-wrap:wrap;">
+            <button class="btn btn-primary" id="btn-add-subject"><i class="fas fa-plus me-1"></i> เพิ่มวิชา</button>
+          </div>
+          <div class="text-muted" style="font-size:.9rem;">
+            ทั้งหมด <b>${totalSubjects}</b> วิชา · ครูผู้สอนรวม <b>${totalTeacherLinks}</b> · ตารางสอน <b>${totalScheduledDays}</b> วัน
+          </div>
+        </div>
+
+        <div class="flex gap-2 mb-3" style="flex-wrap:wrap;align-items:center;padding:.5rem;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:.75rem;">
+          <label style="font-size:.85rem;color:var(--text-2);margin:0;"><i class="fas fa-sitemap me-1"></i> สาขาวิชา:</label>
+          <select id="subjf-major" class="form-control form-control-sm form-select" style="max-width:200px;">
+            <option value="">— ทั้งหมด —</option>
+            ${majors.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+          </select>
+          <label style="font-size:.85rem;color:var(--text-2);margin:0;"><i class="far fa-user-circle me-1"></i> ครูผู้สอน:</label>
+          <select id="subjf-teacher" class="form-control form-control-sm form-select" style="max-width:200px;">
+            <option value="">— ทั้งหมด —</option>
+            ${teacherOpts.map(t => `<option value="${esc(t.teacher_id)}">${esc(t.full_name)}</option>`).join('')}
+          </select>
+          <input id="subjf-search" class="form-control form-control-sm" placeholder="🔍 รหัส/ชื่อ" style="width:200px;" />
+          <button class="btn btn-sm btn-secondary" id="subjf-clear">ล้าง</button>
+          <span id="subjf-count" style="margin-left:auto;color:var(--text-2);font-size:.85rem;"></span>
+        </div>
+
+        <div class="table-wrapper" style="overflow-x:auto;">
+          <table class="table table-hover" style="font-size:.9rem;">
+            <thead style="background:#f0f2f5;">
+              <tr>
+                <th>รหัส</th>
+                <th>ชื่อวิชา</th>
+                <th>ประเภท</th>
+                <th style="text-align:right;">ชม.</th>
+                <th>ช่วงวันเรียน</th>
+                <th style="text-align:center;">ครูผู้สอน</th>
+                <th style="text-align:center;">ตารางสอน</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="subjects-tbody"></tbody>
+          </table>
+        </div>
+      `;
+      document.getElementById('btn-add-subject').onclick = () => openSubjectForm(null);
+      const subjFilters = {
+        major: document.getElementById('subjf-major'),
+        teacher: document.getElementById('subjf-teacher'),
+        search: document.getElementById('subjf-search')
+      };
+      const renderRows = () => {
+        const major = subjFilters.major.value;
+        const tid   = subjFilters.teacher.value;
+        const q     = (subjFilters.search.value || '').toLowerCase();
+        let list = subjects;
+        if (major)  list = list.filter(s => (s.major || '').trim() === major);
+        if (tid)    list = list.filter(s => (teacherMap[s.subject_id] || []).includes(tid));
+        if (q)      list = list.filter(s => (s.subject_id || '').toLowerCase().includes(q) || (s.subject_name || '').toLowerCase().includes(q));
+        const tbody = document.getElementById('subjects-tbody');
+        tbody.innerHTML = list.length === 0
+          ? `<tr><td colspan="8" class="text-muted" style="text-align:center;padding:1rem;">ไม่พบ</td></tr>`
+          : list.map(s => {
+            const tids = teacherMap[s.subject_id] || [];
+            const tcount = tids.length;
+            const firstName = tcount > 0 ? (teacherNameMap[tids[0]] || tids[0]) : '';
+            const tnamesAll = tids.map(t => teacherNameMap[t] || t).join(', ');
+            const tBadge = tcount > 0
+              ? `<span class="badge bg-success">${tcount} คน</span>${firstName ? `<div class="text-muted" style="font-size:.78rem;margin-top:.2rem;" title="${esc(tnamesAll)}">${esc(firstName)}${tcount > 1 ? ' +' + (tcount - 1) : ''}</div>` : ''}`
+              : `<span class="badge bg-secondary">ยังไม่มี</span>`;
+            const sBadge = (s.schedule_days || 0) > 0
+              ? `<span class="badge bg-info">${s.schedule_days} วัน · ${s.schedule_periods || 0} คาบ</span>`
+              : `<span class="badge bg-secondary">ยังไม่ลงตาราง</span>`;
+            const dateRange = (s.start_date && s.end_date)
+              ? `${formatThaiDate(s.start_date).split(' ').slice(0,2).join(' ')} - ${formatThaiDate(s.end_date).split(' ').slice(0,2).join(' ')}`
+              : '-';
+            return `
+              <tr>
+                <td><code>${esc(s.subject_id)}</code></td>
+                <td>${esc(s.subject_name)}</td>
+                <td><span class="badge bg-secondary">${esc(s.course_type || 'normal')}</span></td>
+                <td style="text-align:right;">${s.total_hours || '-'}</td>
+                <td style="font-size:.85rem;">${esc(dateRange)}</td>
+                <td style="text-align:center;cursor:pointer;" data-act="teachers" data-id="${esc(s.subject_id)}" title="คลิกเพื่อจัดการครูผู้สอน">${tBadge}</td>
+                <td style="text-align:center;cursor:pointer;" data-act="schedule" data-id="${esc(s.subject_id)}" title="คลิกเพื่อจัดการตารางสอน">${sBadge}</td>
+                <td>
+                  <div class="d-flex gap-1">
+                    <button class="btn btn-sm btn-secondary" data-act="edit" data-id="${esc(s.subject_id)}" title="แก้ไข"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-primary" data-act="teachers" data-id="${esc(s.subject_id)}" title="ครูผู้สอน"><i class="fas fa-chalkboard-teacher"></i></button>
+                    <button class="btn btn-sm btn-warning" data-act="schedule" data-id="${esc(s.subject_id)}" title="ตารางสอน"><i class="fas fa-calendar-alt"></i></button>
+                    <button class="btn btn-sm btn-danger" data-act="del" data-id="${esc(s.subject_id)}" title="ลบ"><i class="fas fa-trash"></i></button>
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join('');
+        document.getElementById('subjf-count').innerHTML = (major || tid || q)
+          ? `แสดง <b>${list.length}</b> จาก <b>${subjects.length}</b>`
+          : `รวม <b>${subjects.length}</b> วิชา`;
+        tbody.querySelectorAll('[data-act]').forEach(el => {
+          el.onclick = async () => {
+            const r = subjects.find(x => x.subject_id === el.dataset.id);
+            if (!r) return;
+            if (el.dataset.act === 'edit') openSubjectForm(r);
+            else if (el.dataset.act === 'teachers') openSubjectTeachersForm(r);
+            else if (el.dataset.act === 'schedule') openScheduleForm(r);
+            else if (el.dataset.act === 'del') {
+              if (!confirm(`ลบวิชา ${r.subject_id}? (enrollments, attendance ของวิชานี้จะหายตาม)`)) return;
+              try { await deleteSubject(r.subject_id); showAlert('ลบแล้ว', 'success'); await renderSubjects(); }
+              catch (e) { showAlert('ลบ fail: ' + e.message, 'error', 0); }
+            }
+          };
+        });
+      };
+      subjFilters.major.onchange = renderRows;
+      subjFilters.teacher.onchange = renderRows;
+      subjFilters.search.addEventListener('input', debounce(renderRows, 200));
+      document.getElementById('subjf-clear').onclick = () => {
+        subjFilters.major.value = ''; subjFilters.teacher.value = ''; subjFilters.search.value = '';
+        renderRows();
+      };
+      renderRows();
+    }
+    function openSubjectForm(s) {
+      const r = s || {};
+      const types = [
+        ['normal', 'ปกติ'],
+        ['upskill', 'Upskill / Reskill / Newskill'],
+        ['short', 'ระยะสั้น']
+      ];
+      openModal(s ? '✏️ แก้ไขวิชา' : '➕ เพิ่มวิชา', `
+        <div class="row g-2">
+          <div class="col-12 col-md-4"><label class="form-label fw-bold">รหัสวิชา *</label><input id="sj-id" class="form-control" value="${esc(r.subject_id || '')}" ${s ? 'readonly' : ''} required /></div>
+          <div class="col-12 col-md-8"><label class="form-label fw-bold">ชื่อวิชา *</label><input id="sj-name" class="form-control" value="${esc(r.subject_name || '')}" required /></div>
+          <div class="col-12 col-md-6"><label class="form-label fw-bold">สาขา</label><input id="sj-major" class="form-control" value="${esc(r.major || '')}" /></div>
+          <div class="col-12 col-md-6"><label class="form-label fw-bold">ประเภท</label><select id="sj-type" class="form-control form-select">${types.map(([v,l]) => `<option value="${v}" ${r.course_type === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+          <div class="col-6 col-md-3"><label class="form-label fw-bold">ชั่วโมงรวม</label><input id="sj-hours" type="number" min="0" class="form-control" value="${r.total_hours || ''}" /></div>
+          <div class="col-6 col-md-3"><label class="form-label fw-bold">วันเริ่ม</label><input id="sj-start" type="date" class="form-control" value="${esc(r.start_date || '')}" /></div>
+          <div class="col-6 col-md-3"><label class="form-label fw-bold">วันจบ</label><input id="sj-end" type="date" class="form-control" value="${esc(r.end_date || '')}" /></div>
+          <div class="col-6 col-md-3"><label class="form-label fw-bold">แผนก</label><input id="sj-dept" class="form-control" value="${esc(r.department || '')}" /></div>
+        </div>
+      `, async () => {
+        const hours = document.getElementById('sj-hours').value;
+        const row = {
+          subject_id: document.getElementById('sj-id').value.trim(),
+          subject_name: document.getElementById('sj-name').value.trim(),
+          major: document.getElementById('sj-major').value.trim() || null,
+          course_type: document.getElementById('sj-type').value,
+          total_hours: hours === '' ? null : parseInt(hours, 10),
+          start_date: document.getElementById('sj-start').value || null,
+          end_date: document.getElementById('sj-end').value || null,
+          department: document.getElementById('sj-dept').value.trim() || null
+        };
+        if (!row.subject_id || !row.subject_name) throw new Error('กรุณากรอก รหัส + ชื่อวิชา');
+        await upsertSubject(row);
+      });
+    }
+    async function openSubjectTeachersForm(subj) {
+      const current = await getSubjectTeachers(subj.subject_id);
+      const currentIds = new Set(current.map(t => t.teacher_id));
+      const teachers = ctx.teachers.filter(t => t.status === 'active');
+      const depts = Array.from(new Set(teachers.map(t => (t.department || '').trim()).filter(Boolean))).sort();
+      const html = `
+        <div style="margin-bottom:.5rem;">วิชา <code>${esc(subj.subject_id)}</code> — ${esc(subj.subject_name)}</div>
+        <div style="display:flex;gap:.5rem;margin-bottom:.5rem;flex-wrap:wrap;">
+          <input id="st-search" class="form-control form-control-sm" placeholder="🔍 รหัส/ชื่อครู" style="width:200px;" />
+          <select id="st-dept" class="form-control form-select form-select-sm" style="width:180px;">
+            <option value="">ทุกแผนก</option>
+            ${depts.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('')}
+          </select>
+          <span style="align-self:center;font-size:.85rem;color:var(--text-2);">เลือกแล้ว <b id="st-cnt">${currentIds.size}</b> คน</span>
+        </div>
+        <div id="st-list" style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:.5rem;"></div>
+      `;
+      openModal('👨‍🏫 จัดการครูผู้สอน', html, async () => {
+        const ids = Array.from(document.querySelectorAll('#st-list input[type="checkbox"]:checked')).map(c => c.value);
+        await setSubjectTeachers(subj.subject_id, ids);
+      });
+
+      const list = document.getElementById('st-list');
+      const cntEl = document.getElementById('st-cnt');
+      function render() {
+        const q = (document.getElementById('st-search').value || '').toLowerCase();
+        const dept = document.getElementById('st-dept').value;
+        const filtered = teachers.filter(t => {
+          if (dept && (t.department || '').trim() !== dept) return false;
+          if (q && !((t.teacher_id || '').toLowerCase().includes(q) || (t.full_name || '').toLowerCase().includes(q))) return false;
+          return true;
+        });
+        list.innerHTML = filtered.map(t => {
+          const checked = document.querySelector(`#st-list input[value="${esc(t.teacher_id)}"]`)?.checked
+                       ?? currentIds.has(t.teacher_id);
+          return `
+            <label style="display:flex;gap:.5rem;padding:.4rem;border-bottom:1px solid #f0f2f5;cursor:pointer;align-items:center;">
+              <input type="checkbox" value="${esc(t.teacher_id)}" ${checked ? 'checked' : ''} />
+              <span style="flex:1;"><code>${esc(t.teacher_id)}</code> ${esc(t.full_name)} <small style="color:var(--text-2);">(${esc(t.department || '-')})</small></span>
+            </label>
+          `;
+        }).join('');
+        list.querySelectorAll('input').forEach(c => c.onchange = () => {
+          const all = list.querySelectorAll('input[type="checkbox"]:checked').length;
+          // คำนวนรวมจากที่ฉันรู้
+          let totalChecked = 0;
+          teachers.forEach(t => {
+            const el = document.querySelector(`#st-list input[value="${esc(t.teacher_id)}"]`);
+            if (el && el.checked) totalChecked++;
+            else if (!el && currentIds.has(t.teacher_id)) totalChecked++;   // เคย checked แต่ไม่ใน list ตอนนี้
+          });
+          cntEl.textContent = totalChecked;
+        });
+      }
+      document.getElementById('st-search').addEventListener('input', debounce(render, 200));
+      document.getElementById('st-dept').onchange = render;
+      render();
+    }
+
+    // ============================================
+    // 3b. SUBJECT SCHEDULE EDITOR (ตารางสอน)
+    // ============================================
+    async function openScheduleForm(subject) {
+      openModal(`📅 ตารางสอน — ${subject.subject_name}`,
+        '<div class="empty-state"><div class="spinner" style="margin:0 auto 1rem;"></div><p>กำลังโหลด...</p></div>',
+        null, { readonly: true });
+
+      // hide default save button — เราใช้ปุ่มในเนื้อหา modal เอง
+      document.getElementById('modal-save').style.display = 'none';
+      document.getElementById('modal-cancel').textContent = 'ปิด';
+
+      let rows = await getSubjectScheduleAll(subject.subject_id);
+      // normalize: { date, periods: '1,2,3' }
+      let workingRows = rows.map(r => ({ date: r.date, periods: r.periods || '' }));
+
+      const totalHours = subject.total_hours || 0;
+      const periodOptions = Array.from({length: 10}, (_, i) => i + 1);
+
+      function calcTotal() {
+        return workingRows.reduce((sum, r) => {
+          const ps = String(r.periods || '').split(',').map(x => parseInt(x.trim(), 10)).filter(n => n >= 1 && n <= 10);
+          return sum + ps.length;
+        }, 0);
+      }
+      function badgeCls(pct) {
+        if (totalHours <= 0) return 'bg-warning';
+        if (pct >= 100) return 'bg-success';
+        if (pct >= 75)  return 'bg-warning';
+        return 'bg-danger';
+      }
+
+      function renderRows() {
+        if (workingRows.length === 0) {
+          return `<div class="text-muted text-center" style="padding:1rem;">ยังไม่มีตารางสอน — เพิ่มวันด้านบนเพื่อเริ่ม</div>`;
+        }
+        return `
+          <table class="table table-hover" style="font-size:.9rem;">
+            <thead style="background:#f0f2f5;">
+              <tr><th style="width:160px;">วันที่</th><th>คาบเรียน</th><th style="width:70px;text-align:right;">ชม.</th><th style="width:50px;"></th></tr>
+            </thead>
+            <tbody id="sch-rows-body">
+              ${workingRows.map((r, idx) => {
+                const periods = String(r.periods || '').split(',').map(x => parseInt(x.trim(), 10)).filter(n => n >= 1 && n <= 10);
+                return `
+                  <tr data-idx="${idx}">
+                    <td><input type="date" class="form-control form-control-sm sch-date" value="${esc(r.date)}" /></td>
+                    <td>
+                      <div class="flex gap-1" style="flex-wrap:wrap;">
+                        ${periodOptions.map(p => `
+                          <label style="display:inline-flex;align-items:center;gap:.25rem;padding:.2rem .5rem;border:1px solid var(--border);border-radius:.4rem;cursor:pointer;background:${periods.includes(p) ? '#e3f2fd' : '#fff'};font-size:.85rem;">
+                            <input type="checkbox" class="sch-period" value="${p}" ${periods.includes(p) ? 'checked' : ''} />
+                            <span>${p}</span>
+                          </label>
+                        `).join('')}
+                      </div>
+                    </td>
+                    <td style="text-align:right;"><span class="sch-hours">${periods.length}</span></td>
+                    <td><button type="button" class="btn btn-sm btn-danger" data-act="remove" data-idx="${idx}"><i class="fas fa-trash"></i></button></td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        `;
+      }
+
+      function collect() {
+        const body = document.getElementById('sch-rows-body');
+        if (!body) return [];
+        return Array.from(body.querySelectorAll('tr[data-idx]')).map(tr => {
+          const date = tr.querySelector('.sch-date').value;
+          const ps = Array.from(tr.querySelectorAll('.sch-period:checked')).map(c => parseInt(c.value, 10)).sort((a,b) => a-b);
+          return { date, periods: ps.join(',') };
+        }).filter(r => r.date && r.periods);
+      }
+
+      function updateSummary() {
+        // sync workingRows from DOM
+        workingRows = collect();
+        const t = calcTotal();
+        const pct = totalHours > 0 ? Math.round(t * 100 / totalHours) : 0;
+        const tEl = document.getElementById('sch-total');
+        const bEl = document.getElementById('sch-badge');
+        if (tEl) tEl.textContent = t;
+        if (bEl) {
+          bEl.className = 'badge ' + badgeCls(pct);
+          bEl.textContent = totalHours > 0 ? pct + '%' : '-';
+        }
+        // update per-row hours
+        document.querySelectorAll('#sch-rows-body tr[data-idx]').forEach(tr => {
+          const n = tr.querySelectorAll('.sch-period:checked').length;
+          const hr = tr.querySelector('.sch-hours');
+          if (hr) hr.textContent = n;
+        });
+      }
+
+      function paint() {
+        const initT = calcTotal();
+        const initPct = totalHours > 0 ? Math.round(initT * 100 / totalHours) : 0;
+        document.getElementById('modal-body').innerHTML = `
+          <div style="background:#fff8e1;border:1px solid #ffecb3;border-radius:8px;padding:.75rem;margin-bottom:.75rem;">
+            <div style="font-weight:600;margin-bottom:.25rem;">📊 สรุปชั่วโมง</div>
+            <div>ตารางสอน: <b id="sch-total">${initT}</b> ชม. / หลักสูตร: <b>${totalHours}</b> ชม.
+              <span id="sch-badge" class="badge ${badgeCls(initPct)}" style="margin-left:.5rem;">${totalHours > 0 ? initPct + '%' : '-'}</span>
+            </div>
+          </div>
+          <div class="flex gap-2 mb-3" style="flex-wrap:wrap;margin-bottom:.75rem;">
+            <input type="date" id="sch-new-date" class="form-control form-control-sm" style="max-width:180px;"
+                   ${subject.start_date ? `min="${subject.start_date}"` : ''}
+                   ${subject.end_date ? `max="${subject.end_date}"` : ''} />
+            <button type="button" class="btn btn-sm btn-success" id="btn-add-day"><i class="fas fa-plus me-1"></i> เพิ่มวัน</button>
+            <div class="text-muted" style="align-self:center;font-size:.85rem;margin-left:auto;">1 คาบ = 1 ชั่วโมง (1-10)</div>
+          </div>
+          <div id="sch-rows" style="max-height:50vh;overflow:auto;">${renderRows()}</div>
+          <div style="margin-top:.75rem;display:flex;gap:.5rem;justify-content:flex-end;">
+            <button class="btn btn-primary" id="btn-save-sched"><i class="fas fa-save me-1"></i> บันทึกตารางสอน</button>
+          </div>
+        `;
+        bindEvents();
+      }
+
+      function bindEvents() {
+        document.getElementById('sch-rows').addEventListener('change', updateSummary);
+        document.getElementById('btn-add-day').onclick = () => {
+          const d = document.getElementById('sch-new-date').value;
+          if (!d) { showAlert('กรุณาเลือกวันที่', 'error', 0); return; }
+          workingRows = collect();
+          if (workingRows.some(r => r.date === d)) { showAlert('วันนี้มีในรายการแล้ว', 'warn', 0); return; }
+          workingRows.push({ date: d, periods: '1' });
+          workingRows.sort((a, b) => a.date.localeCompare(b.date));
+          document.getElementById('sch-rows').innerHTML = renderRows();
+          updateSummary();
+        };
+        document.getElementById('sch-rows').addEventListener('click', (e) => {
+          const btn = e.target.closest('button[data-act="remove"]');
+          if (!btn) return;
+          workingRows = collect();
+          workingRows.splice(+btn.dataset.idx, 1);
+          document.getElementById('sch-rows').innerHTML = renderRows();
+          updateSummary();
+        });
+        document.getElementById('btn-save-sched').onclick = async () => {
+          const finalRows = collect();
+          if (finalRows.length === 0 && !confirm('ตารางสอนว่าง — ยืนยันล้างทั้งหมด?')) return;
+          const btn = document.getElementById('btn-save-sched');
+          btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> กำลังบันทึก...';
+          try {
+            const res = await saveSubjectSchedule(subject.subject_id, finalRows);
+            showAlert(`บันทึกตารางสอน ${res.count} วัน`, 'success');
+            closeModal();
+            await renderSubjects();   // refresh badge
+          } catch (e) {
+            showAlert('บันทึก fail: ' + e.message, 'error', 0);
+            btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i> บันทึกตารางสอน';
+          }
+        };
+      }
+
+      paint();
+    }
+
+    // ============================================
+    // 4. CLASSES (ตาม v1 — มี major filter + จำนวน นร.)
+    // ============================================
+    async function renderClasses() {
+      const classes = await listClassesStats();
+      ctx.classes = classes;
+      if (ctx.teachers.length === 0) ctx.teachers = await listTeachers({ limit: 500 });
+
+      const majors = Array.from(new Set(classes.map(c => (c.major || '').trim()).filter(Boolean))).sort();
+      const cur = ctx.classesMajorFilter || '';
+
+      document.getElementById('admin-content').innerHTML = `
+        <div class="flex mb-4 gap-2" style="justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:.75rem;">
+          <div class="flex gap-2" style="align-items:center;flex-wrap:wrap;">
+            <button class="btn btn-primary" id="btn-add-class"><i class="fas fa-plus me-1"></i> เพิ่มห้องเรียน</button>
+            <select id="classes-filter-major" class="form-control form-control-sm form-select" style="min-width:200px;">
+              <option value="">ทุกสาขาวิชา</option>
+              ${majors.map(m => `<option value="${esc(m)}" ${m === cur ? 'selected' : ''}>${esc(m)}</option>`).join('')}
+            </select>
+            <input id="classes-search" class="form-control form-control-sm" placeholder="🔍 รหัส/สาขา" style="width:200px;" />
+          </div>
+          <div class="text-muted" id="classes-count" style="font-size:.9rem;"></div>
+        </div>
+        <div class="table-wrapper" style="overflow-x:auto;">
+          <table class="table table-hover" style="font-size:.9rem;">
+            <thead style="background:#f0f2f5;">
+              <tr>
+                <th>รหัสห้อง</th>
+                <th>สาขาวิชา</th>
+                <th>ระดับ</th>
+                <th>ชั้นปี</th>
+                <th>กลุ่ม</th>
+                <th>ครูที่ปรึกษา</th>
+                <th style="text-align:right;">จำนวน นร.</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="classes-tbody"></tbody>
+          </table>
+        </div>
+      `;
+      document.getElementById('btn-add-class').onclick = () => openClassForm(null);
+      document.getElementById('classes-filter-major').onchange = (e) => { ctx.classesMajorFilter = e.target.value; renderRows(); };
+
+      const renderRows = () => {
+        const m = ctx.classesMajorFilter || '';
+        const q = (document.getElementById('classes-search').value || '').toLowerCase();
+        let list = classes;
+        if (m) list = list.filter(c => (c.major || '').trim() === m);
+        if (q) list = list.filter(c => (c.class_id || '').toLowerCase().includes(q) || (c.major || '').toLowerCase().includes(q));
+        const totalStudents = list.reduce((s, c) => s + (c.student_count || 0), 0);
+
+        const tbody = document.getElementById('classes-tbody');
+        tbody.innerHTML = list.length === 0
+          ? `<tr><td colspan="8" class="text-muted" style="text-align:center;padding:1rem;">ไม่พบห้องเรียน</td></tr>`
+          : list.map(c => {
+            const cnt = c.student_count || 0;
+            const cntBadge = cnt > 0 ? `<span class="badge bg-success">${cnt}</span>` : `<span class="badge bg-secondary">${cnt}</span>`;
+            const advLabel = c.advisor_name
+              ? esc(c.advisor_name)
+              : (c.advisor_id ? esc(c.advisor_id) : '<span class="text-muted">—</span>');
+            return `
+              <tr>
+                <td><strong><code>${esc(c.class_id)}</code></strong></td>
+                <td>${esc(c.major || '—')}</td>
+                <td>${esc(c.level || 'ปวช.')}</td>
+                <td>${c.year || 1}</td>
+                <td><span class="badge bg-secondary">${c.room || 1}</span></td>
+                <td>${advLabel}</td>
+                <td style="text-align:right;">${cntBadge}</td>
+                <td>
+                  <div class="d-flex gap-1">
+                    <button class="btn btn-sm btn-secondary" data-act="edit" data-id="${esc(c.class_id)}" title="แก้ไข"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-danger" data-act="del" data-id="${esc(c.class_id)}" title="ลบ"><i class="fas fa-trash"></i></button>
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join('');
+
+        document.getElementById('classes-count').innerHTML = (m || q)
+          ? `แสดง <b>${list.length}</b> ห้อง · นักเรียน <b>${totalStudents}</b> คน`
+          : `ทั้งหมด <b>${classes.length}</b> ห้อง · นักเรียนรวม <b>${totalStudents}</b> คน`;
+
+        tbody.querySelectorAll('button').forEach(b => {
+          b.onclick = async () => {
+            const r = classes.find(x => x.class_id === b.dataset.id);
+            if (b.dataset.act === 'edit') openClassForm(r);
+            else if (b.dataset.act === 'del') {
+              if (!confirm(`ลบห้อง ${r.class_id}? (นักเรียนจะถูก unlink)`)) return;
+              try { await deleteClass(r.class_id); showAlert('ลบแล้ว', 'success'); await renderClasses(); }
+              catch (e) { showAlert('ลบ fail: ' + e.message, 'error', 0); }
+            }
+          };
+        });
+      };
+      document.getElementById('classes-search').addEventListener('input', debounce(renderRows, 200));
+      renderRows();
+    }
+    function openClassForm(c) {
+      const r = c || {};
+      const LEVELS = ['ปวช.','ปวส.','ป.ตรี','ป.โท','มัธยมศึกษา','มัธยมศึกษาตอนต้น','มัธยมศึกษาตอนปลาย','ประถมศึกษา','อนุบาล','อื่นๆ'];
+      const lvOpts = LEVELS.map(l => `<option value="${l}" ${r.level === l ? 'selected' : ''}>${l}</option>`).join('');
+      const tcOpts = '<option value="">— ไม่มี —</option>' + ctx.teachers.map(t =>
+        `<option value="${esc(t.teacher_id)}" ${r.advisor_id === t.teacher_id ? 'selected' : ''}>${esc(t.teacher_id)} — ${esc(t.full_name)}</option>`
+      ).join('');
+      openModal(c ? '✏️ แก้ไขห้อง' : '➕ เพิ่มห้อง', `
+        <div class="row g-2">
+          <div class="col-12 col-md-4"><label class="form-label fw-bold">รหัสห้อง *</label><input id="c-id" class="form-control" value="${esc(r.class_id || '')}" ${c ? 'readonly' : ''} required /></div>
+          <div class="col-12 col-md-8"><label class="form-label fw-bold">สาขา *</label><input id="c-major" class="form-control" value="${esc(r.major || '')}" required /></div>
+          <div class="col-6 col-md-3"><label class="form-label fw-bold">ระดับ *</label><select id="c-level" class="form-control form-select">${lvOpts}</select></div>
+          <div class="col-6 col-md-3"><label class="form-label fw-bold">ชั้นปี (1-6)</label><input id="c-year" type="number" min="1" max="6" class="form-control" value="${r.year || 1}" required /></div>
+          <div class="col-6 col-md-3"><label class="form-label fw-bold">กลุ่ม</label><input id="c-room" type="number" min="1" class="form-control" value="${r.room || 1}" required /></div>
+          <div class="col-12 col-md-12"><label class="form-label fw-bold">ครูที่ปรึกษา</label><select id="c-advisor" class="form-control form-select">${tcOpts}</select></div>
+        </div>
+      `, async () => {
+        const row = {
+          class_id: document.getElementById('c-id').value.trim(),
+          major: document.getElementById('c-major').value.trim(),
+          level: document.getElementById('c-level').value,
+          year: parseInt(document.getElementById('c-year').value, 10),
+          room: parseInt(document.getElementById('c-room').value, 10),
+          advisor_id: document.getElementById('c-advisor').value || null
+        };
+        if (!row.class_id || !row.major) throw new Error('กรุณากรอก รหัส + สาขา');
+        await upsertClass(row);
+      });
+    }
+
+    // ============================================
+    // 5. ENROLLMENTS — เหมือน v1 (aggregate per class + bulk modal + detail modal)
+    // ============================================
+    const enrollState = {
+      enrollments: [],            // [{student_id, subject_id, class_id}]
+      classes: [],                // [{class_id, major, level, year, room, ...}]
+      subjects: [],               // [{subject_id, subject_name, major, course_type}]
+      teachers: [],               // [{teacher_id, full_name}]
+      subjectTeacherMap: {},      // subject_id → [teacher_id]
+      scheduleCounts: {},         // subject_id → {days, periods, firstDate, lastDate}
+      majorFilter: '',
+      levelFilter: '',
+      classFilter: '',
+      statusFilter: '',
+      page: 1,
+      pageSize: 50
+    };
+    window._enrollState = enrollState;
+
+    function classLabel(c) {
+      if (!c) return '-';
+      const parts = [];
+      if (c.major) parts.push(c.major);
+      if (c.level) parts.push(c.level);
+      if (c.year)  parts.push('ปี' + c.year);
+      if (c.room)  parts.push('/' + c.room);
+      return parts.join(' ') || c.class_id;
+    }
+    function fmtThaiShort(ymd) {
+      if (!ymd || typeof ymd !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(ymd)) return ymd || '';
+      const [y, m, d] = ymd.split('T')[0].split('-');
+      const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+      return `${parseInt(d,10)} ${months[parseInt(m,10)-1]} ${(parseInt(y,10)+543)%100}`;
+    }
+
+    async function renderEnrollments() {
+      // โหลดข้อมูลทั้งหมด (ใช้ caches เผื่อมี)
+      const [enrollments, students, subjects, classes, subjTeacherMap, teachers, scheduleCounts] = await Promise.all([
+        listAllEnrollments(),
+        listStudents({ limit: 5000 }),
+        listSubjects(),
+        listClasses(),
+        getAllSubjectTeacherMap(),
+        ctx.teachers.length > 0 ? Promise.resolve(ctx.teachers) : listTeachers({ limit: 500 }),
+        getSubjectScheduleCounts().catch(() => ({}))
+      ]);
+      if (ctx.teachers.length === 0) ctx.teachers = teachers;
+
+      // เก็บ context
+      enrollState.enrollments = enrollments;
+      enrollState.students = students;
+      enrollState.subjects = subjects;
+      enrollState.classes = classes;
+      enrollState.subjectTeacherMap = subjTeacherMap;
+      enrollState.teachers = teachers;
+      enrollState.scheduleCounts = scheduleCounts;
+
+      // map ช่วยค้น
+      enrollState.studentMap = Object.fromEntries(students.map(s => [s.student_id, s.full_name]));
+      enrollState.subjectMap = Object.fromEntries(subjects.map(s => [s.subject_id, s.subject_name]));
+      enrollState.teacherMap = Object.fromEntries(teachers.map(t => [t.teacher_id, t.full_name || t.teacher_id]));
+
+      // dropdown lists
+      const majorList = [...new Set(classes.map(c => (c.major || '').trim()).filter(Boolean))].sort();
+      const levelList = [...new Set(classes.map(c => (c.level || '').trim()).filter(Boolean))].sort();
+
+      document.getElementById('admin-content').innerHTML = `
+        <div class="flex mb-3 gap-2" style="flex-wrap:wrap;align-items:center;margin-bottom:.75rem;">
+          <button class="btn btn-primary" id="btn-open-bulk-enroll">
+            <i class="fas fa-users me-1"></i> ลงทะเบียนทั้งห้อง
+          </button>
+          <div class="flex-1" style="flex:1;"></div>
+          <select id="flt-enroll-major" class="form-control form-select form-select-sm" style="max-width:200px;">
+            <option value="">ทุกสาขาวิชา</option>
+            ${majorList.map(m => `<option value="${esc(m)}" ${enrollState.majorFilter === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}
+          </select>
+          <select id="flt-enroll-level" class="form-control form-select form-select-sm" style="max-width:160px;">
+            <option value="">ทุกระดับ</option>
+            ${levelList.map(l => `<option value="${esc(l)}" ${enrollState.levelFilter === l ? 'selected' : ''}>${esc(l)}</option>`).join('')}
+          </select>
+          <select id="flt-enroll-class" class="form-control form-select form-select-sm" style="max-width:220px;">
+            <option value="">ทุกห้อง</option>
+            ${classes.map(c => `<option value="${esc(c.class_id)}" ${enrollState.classFilter === c.class_id ? 'selected' : ''}>${esc(classLabel(c))}</option>`).join('')}
+          </select>
+          <select id="flt-enroll-status" class="form-control form-select form-select-sm" style="max-width:200px;">
+            <option value="" ${!enrollState.statusFilter ? 'selected' : ''}>ทุกสถานะ</option>
+            <option value="enrolled" ${enrollState.statusFilter === 'enrolled' ? 'selected' : ''}>✅ ลงทะเบียนแล้ว</option>
+            <option value="not-enrolled" ${enrollState.statusFilter === 'not-enrolled' ? 'selected' : ''}>❌ ยังไม่ได้ลง</option>
+          </select>
+          <button class="btn btn-primary btn-sm" id="btn-apply-enroll-flt"><i class="fas fa-search me-1"></i> ค้นหา</button>
+          <button class="btn btn-secondary btn-sm" id="btn-clear-enroll-flt">ล้าง</button>
+        </div>
+        <div class="text-muted mb-2" id="enroll-count" style="font-size:.9rem;"></div>
+        <div class="table-wrapper" style="overflow-x:auto;">
+          <table class="table table-hover" style="font-size:.9rem;">
+            <thead style="background:#f0f2f5;">
+              <tr>
+                <th class="t-center" style="width:60px;text-align:center;">ลำดับ</th>
+                <th>สาขาวิชา</th>
+                <th style="text-align:center;">ระดับ</th>
+                <th style="text-align:center;">ชั้นปี</th>
+                <th style="text-align:center;">กลุ่ม</th>
+                <th style="text-align:center;">สถานะ</th>
+                <th style="text-align:center;background:#eef2ff;">ปกติ</th>
+                <th style="text-align:center;background:#fef3c7;">Upskill</th>
+                <th style="text-align:center;background:#f3e8ff;">ระยะสั้น</th>
+                <th style="text-align:center;background:#e0e7ff;">รวม</th>
+              </tr>
+            </thead>
+            <tbody id="enroll-tbody"></tbody>
+          </table>
+        </div>
+        <div id="enroll-pager" class="flex" style="justify-content:center;align-items:center;gap:.4rem;flex-wrap:wrap;margin-top:.75rem;"></div>
+      `;
+
+      // wire events
+      document.getElementById('btn-open-bulk-enroll').onclick = openBulkEnrollForm;
+      document.getElementById('btn-apply-enroll-flt').onclick = applyEnrollFilter;
+      document.getElementById('btn-clear-enroll-flt').onclick = clearEnrollFilter;
+      ['flt-enroll-major','flt-enroll-level','flt-enroll-class','flt-enroll-status'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.onchange = applyEnrollFilter;
+      });
+
+      renderEnrollPage();
+    }
+
+    function applyEnrollFilter() {
+      enrollState.majorFilter  = document.getElementById('flt-enroll-major')?.value  || '';
+      enrollState.levelFilter  = document.getElementById('flt-enroll-level')?.value  || '';
+      enrollState.classFilter  = document.getElementById('flt-enroll-class')?.value  || '';
+      enrollState.statusFilter = document.getElementById('flt-enroll-status')?.value || '';
+      enrollState.page = 1;
+      renderEnrollPage();
+    }
+    function clearEnrollFilter() {
+      enrollState.majorFilter = enrollState.levelFilter = enrollState.classFilter = enrollState.statusFilter = '';
+      ['flt-enroll-major','flt-enroll-level','flt-enroll-class','flt-enroll-status'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = '';
+      });
+      enrollState.page = 1;
+      renderEnrollPage();
+    }
+    function gotoEnrollPage(p) {
+      enrollState.page = Math.max(1, parseInt(p, 10) || 1);
+      renderEnrollPage();
+      const tw = document.querySelector('#admin-content .table-wrapper');
+      if (tw) tw.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    window.gotoEnrollPage = gotoEnrollPage;
+
+    function renderEnrollPage() {
+      const st = enrollState;
+      const subjTypeMap = Object.fromEntries(
+        st.subjects.map(s => [String(s.subject_id), String(s.course_type || 'normal').toLowerCase()])
+      );
+      // classId → Set(subjectIds)
+      const classSubjMap = {};
+      st.enrollments.forEach(e => {
+        const cid = String(e.class_id || '');
+        if (!cid) return;
+        (classSubjMap[cid] = classSubjMap[cid] || new Set()).add(String(e.subject_id));
+      });
+
+      let rows = st.classes.map(c => {
+        const cid = String(c.class_id);
+        const sids = Array.from(classSubjMap[cid] || []);
+        const types = { normal: 0, upskill: 0, short: 0 };
+        sids.forEach(sid => {
+          const ct = subjTypeMap[sid] || 'normal';
+          if (types[ct] != null) types[ct]++; else types.normal++;
+        });
+        return {
+          classId: cid,
+          major: (c.major || '').trim(),
+          level: (c.level || '').trim(),
+          year: String(c.year || '').trim(),
+          room: String(c.room || '').trim() || '-',
+          normalCount: types.normal,
+          upskillCount: types.upskill,
+          shortCount: types.short,
+          totalCount: sids.length,
+          hasEnrollment: sids.length > 0
+        };
+      });
+
+      // filter
+      const { majorFilter: mj, levelFilter: lv, classFilter: cls, statusFilter: stt } = st;
+      rows = rows.filter(r =>
+        (!mj || r.major === mj) &&
+        (!lv || r.level === lv) &&
+        (!cls || r.classId === cls) &&
+        (!stt || (stt === 'enrolled' ? r.hasEnrollment : !r.hasEnrollment))
+      );
+      // sort: ยังไม่ลงขึ้นก่อน → สาขา → ระดับ → ปี
+      rows.sort((a, b) => {
+        if (a.hasEnrollment !== b.hasEnrollment) return a.hasEnrollment ? 1 : -1;
+        return (a.major || '').localeCompare(b.major || '', 'th') ||
+               (a.level || '').localeCompare(b.level || '', 'th') ||
+               (a.year || '').localeCompare(b.year || '', 'th');
+      });
+
+      const total = rows.length;
+      const ps = st.pageSize || 50;
+      const totalPages = Math.max(1, Math.ceil(total / ps));
+      if (st.page > totalPages) st.page = totalPages;
+      const start = (st.page - 1) * ps;
+      const slice = rows.slice(start, start + ps);
+
+      const countEl = document.getElementById('enroll-count');
+      if (countEl) {
+        const enrolledN = rows.filter(r => r.hasEnrollment).length;
+        countEl.innerHTML = total === 0
+          ? 'ไม่พบรายการที่ตรงกับตัวกรอง'
+          : `พบทั้งหมด <b>${total}</b> ห้อง — ✅ ลงแล้ว <b style="color:#16a34a;">${enrolledN}</b> · ❌ ยังไม่ลง <b style="color:#b91c1c;">${total - enrolledN}</b> — แสดง ${start + 1}–${start + slice.length} (หน้า ${st.page}/${totalPages})`;
+      }
+
+      const numCell = (n, color) => `<span style="display:inline-block;min-width:34px;padding:2px 8px;border-radius:999px;background:${n>0?color:'#f1f5f9'};color:${n>0?'#fff':'#94a3b8'};font-weight:700;">${n}</span>`;
+      const tb = document.getElementById('enroll-tbody');
+      if (tb) {
+        tb.innerHTML = slice.length === 0
+          ? `<tr><td colspan="10" style="text-align:center;color:#6b7280;padding:1rem;">— ไม่มีรายการ —</td></tr>`
+          : slice.map((r, i) => `
+              <tr>
+                <td style="text-align:center;"><b>${start + i + 1}</b></td>
+                <td><i class="fas fa-graduation-cap me-1" style="color:#94a3b8;"></i>${esc(r.major || '-')}</td>
+                <td style="text-align:center;">${esc(r.level || '-')}</td>
+                <td style="text-align:center;">${esc(r.year || '-')}</td>
+                <td style="text-align:center;">${esc(r.room || '-')}</td>
+                <td style="text-align:center;">${r.hasEnrollment
+                  ? `<span class="badge bg-success">✅ ลงแล้ว</span> <button class="btn btn-sm btn-secondary" style="padding:2px 8px;margin-left:4px;" data-act="detail" data-cid="${esc(r.classId)}" title="ดูรายชื่อ"><i class="fas fa-list"></i> ดู</button>`
+                  : '<span class="badge bg-danger">❌ ยังไม่ลง</span>'}</td>
+                <td style="text-align:center;">${numCell(r.normalCount, '#4f46e5')}</td>
+                <td style="text-align:center;">${numCell(r.upskillCount, '#d97706')}</td>
+                <td style="text-align:center;">${numCell(r.shortCount, '#9333ea')}</td>
+                <td style="text-align:center;">${numCell(r.totalCount, '#1a237e')}</td>
+              </tr>
+            `).join('');
+
+        tb.querySelectorAll('button[data-act="detail"]').forEach(b => {
+          b.onclick = () => showClassEnrollDetail(b.dataset.cid);
+        });
+      }
+
+      // pager
+      const pager = document.getElementById('enroll-pager');
+      if (!pager) return;
+      if (totalPages <= 1) { pager.innerHTML = ''; return; }
+      let from = Math.max(1, st.page - 2);
+      let to = Math.min(totalPages, from + 4);
+      from = Math.max(1, to - 4);
+      const btns = [];
+      btns.push(`<button class="btn btn-sm btn-secondary" ${st.page <= 1 ? 'disabled' : ''} onclick="gotoEnrollPage(${st.page - 1})">&laquo; ก่อนหน้า</button>`);
+      if (from > 1) {
+        btns.push(`<button class="btn btn-sm btn-secondary" onclick="gotoEnrollPage(1)">1</button>`);
+        if (from > 2) btns.push(`<span class="text-muted">…</span>`);
+      }
+      for (let p = from; p <= to; p++) {
+        btns.push(`<button class="btn btn-sm ${p === st.page ? 'btn-primary' : 'btn-secondary'}" onclick="gotoEnrollPage(${p})">${p}</button>`);
+      }
+      if (to < totalPages) {
+        if (to < totalPages - 1) btns.push(`<span class="text-muted">…</span>`);
+        btns.push(`<button class="btn btn-sm btn-secondary" onclick="gotoEnrollPage(${totalPages})">${totalPages}</button>`);
+      }
+      btns.push(`<button class="btn btn-sm btn-secondary" ${st.page >= totalPages ? 'disabled' : ''} onclick="gotoEnrollPage(${st.page + 1})">ถัดไป &raquo;</button>`);
+      pager.innerHTML = btns.join('');
+    }
+
+    // ----- รายชื่อนักเรียนในห้อง (Modal Detail) -----
+    async function showClassEnrollDetail(classId) {
+      const cls = enrollState.classes.find(c => String(c.class_id) === String(classId));
+      const clsLabel = classLabel(cls);
+
+      // โหลด detail แบบ join จาก server (ข้อมูลใหม่ล่าสุด)
+      let detail;
+      try {
+        detail = await getClassEnrollmentDetail(classId);
+      } catch (e) {
+        showAlert('โหลด detail fail: ' + e.message, 'error', 0);
+        return;
+      }
+
+      // group by subject
+      const bySubj = {};
+      detail.forEach(r => {
+        const sid = String(r.subject_id);
+        if (!bySubj[sid]) bySubj[sid] = { subjectName: r.subjects?.subject_name || sid, students: [] };
+        bySubj[sid].students.push({
+          studentId: r.student_id,
+          fullName: r.students?.full_name || '-'
+        });
+      });
+
+      const subjIds = Object.keys(bySubj).sort((a, b) =>
+        String(bySubj[a].subjectName).localeCompare(String(bySubj[b].subjectName), 'th')
+      );
+
+      const body = subjIds.length === 0
+        ? '<div style="text-align:center;color:#6b7280;padding:1rem;">— ยังไม่มีวิชาที่ลงทะเบียน —</div>'
+        : subjIds.map(sid => {
+            const grp = bySubj[sid];
+            const stuRows = grp.students.map(s =>
+              `<tr>
+                <td style="text-align:center;">${esc(s.studentId)}</td>
+                <td>${esc(s.fullName)}</td>
+                <td style="text-align:center;"><button class="btn btn-sm btn-danger" style="padding:2px 8px;" data-act="unenroll-one" data-stid="${esc(s.studentId)}" data-sid="${esc(sid)}" data-cid="${esc(classId)}" title="ลบคนนี้"><i class="fas fa-times"></i></button></td>
+              </tr>`
+            ).join('');
+            return `
+              <div style="margin-bottom:1rem;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+                <div style="background:#f1f5f9;padding:.5rem .75rem;font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:.5rem;">
+                  <span>📘 ${esc(grp.subjectName)} <span style="color:#6b7280;font-weight:400;">(${grp.students.length} คน)</span></span>
+                  <button class="btn btn-sm btn-danger" data-act="unenroll-subj" data-cid="${esc(classId)}" data-sid="${esc(sid)}" data-sname="${esc(grp.subjectName)}" title="ยกเลิกการลงทะเบียนทั้งวิชา"><i class="fas fa-trash me-1"></i>ลบทั้งวิชา</button>
+                </div>
+                <table class="table" style="margin:0;font-size:.9rem;">
+                  <thead style="background:#fafafa;">
+                    <tr>
+                      <th style="text-align:center;width:140px;">รหัส</th>
+                      <th>ชื่อ-สกุล</th>
+                      <th style="text-align:center;width:60px;">ลบ</th>
+                    </tr>
+                  </thead>
+                  <tbody>${stuRows}</tbody>
+                </table>
+              </div>`;
+          }).join('');
+
+      openModal(`👥 รายชื่อที่ลงทะเบียน — ${esc(clsLabel)}`, body, null, { readonly: true });
+
+      // wire button (ภายใน modal)
+      document.querySelectorAll('#modal-body [data-act="unenroll-one"]').forEach(b => {
+        b.onclick = async () => {
+          const name = enrollState.studentMap[b.dataset.stid] || b.dataset.stid;
+          if (!confirm(`ยกเลิกการลงทะเบียนของ ${name} (${b.dataset.stid}) ในวิชานี้?\n\n⚠ ประวัติเช็คชื่อ (Attendance) จะยังคงอยู่`)) return;
+          try {
+            await deleteEnrollment(b.dataset.stid, b.dataset.sid);
+            showAlert('ยกเลิกสำเร็จ', 'success');
+            await renderEnrollments();
+            showClassEnrollDetail(b.dataset.cid);
+          } catch (e) {
+            showAlert('ลบ fail: ' + e.message, 'error', 0);
+          }
+        };
+      });
+      document.querySelectorAll('#modal-body [data-act="unenroll-subj"]').forEach(b => {
+        b.onclick = async () => {
+          if (!confirm(`ยกเลิกการลงทะเบียน "${b.dataset.sname}" ของห้องนี้ทุกคน?\n\n⚠ ประวัติเช็คชื่อ (Attendance) จะยังคงอยู่`)) return;
+          if (!confirm(`ยืนยันอีกครั้ง — การกระทำนี้ลบถาวร ไม่สามารถ undo ได้`)) return;
+          try {
+            await bulkUnenroll(b.dataset.cid, b.dataset.sid);
+            showAlert('ยกเลิกสำเร็จ', 'success');
+            await renderEnrollments();
+            showClassEnrollDetail(b.dataset.cid);
+          } catch (e) {
+            showAlert('ลบ fail: ' + e.message, 'error', 0);
+          }
+        };
+      });
+    }
+    window.showClassEnrollDetail = showClassEnrollDetail;
+
+    // ----- Bulk Enroll Modal -----
+    function openBulkEnrollForm() {
+      const st = enrollState;
+      const { classes, subjects, subjectTeacherMap, teacherMap } = st;
+
+      // build subject helpers
+      const subjTeacherNames = {};
+      Object.keys(subjectTeacherMap || {}).forEach(sid => {
+        subjTeacherNames[sid] = (subjectTeacherMap[sid] || []).map(tid => teacherMap[tid] || tid).join(', ');
+      });
+      const subjMajorList = [...new Set(subjects.map(s => (s.major || '').trim()).filter(Boolean))].sort();
+
+      const body = `
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label class="form-label fw-bold">ห้อง *</label>
+          <select id="be-class" class="form-control form-select" onchange="updateBulkEnrollPreview()">
+            <option value="">-- เลือกห้อง --</option>
+            ${classes.map(c => `<option value="${esc(c.class_id)}">${esc(classLabel(c))}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label fw-bold" style="margin-bottom:.5rem;">วิชา (เลือกได้หลายวิชา) *</label>
+          <div style="background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;padding:.6rem .75rem;margin-bottom:.4rem;">
+            <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-bottom:.4rem;">
+              <input type="text" id="be-search" class="form-control form-control-sm" placeholder="🔍 ค้นหาชื่อวิชา..." style="flex:1;min-width:140px;" oninput="applyBulkSubjectFilter()">
+              <select id="be-flt-major" class="form-control form-select form-select-sm" style="max-width:160px;" onchange="applyBulkSubjectFilter()">
+                <option value="">🏷️ ทุกสาขา</option>
+                ${subjMajorList.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+              </select>
+              <select id="be-flt-teacher" class="form-control form-select form-select-sm" style="max-width:180px;" onchange="applyBulkSubjectFilter()">
+                <option value="">👨‍🏫 ทุกครู</option>
+                ${st.teachers.map(t => `<option value="${esc(t.teacher_id)}">${esc(t.full_name || t.teacher_id)}</option>`).join('')}
+              </select>
+            </div>
+            <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;">
+              <button type="button" class="btn btn-sm btn-primary" onclick="toggleFilteredBulkSubjects(true)" title="เลือกทุกวิชาที่กรองอยู่"><i class="fas fa-check-square me-1"></i>เลือกที่กรอง</button>
+              <button type="button" class="btn btn-sm btn-secondary" onclick="toggleAllBulkSubjects(false)"><i class="fas fa-times me-1"></i>ล้างเลือก</button>
+              <div class="flex-1" style="flex:1;"></div>
+              <span class="text-muted" style="font-size:.85rem;">เลือกแล้ว <b id="be-count-sel" style="color:#1a237e;">0</b>/<span id="be-count-shown">${subjects.length}</span> วิชา</span>
+            </div>
+          </div>
+          <div style="max-height:280px;overflow:auto;border:1px solid #e5e7eb;border-radius:8px;padding:.5rem 1rem;background:#fff;">
+            ${subjects.length === 0
+              ? '<div class="text-muted">ยังไม่มีวิชาในระบบ — เพิ่มในแท็บ 📚 วิชา ก่อน</div>'
+              : subjects.map(s => {
+                  const sid = String(s.subject_id);
+                  const major = (s.major || '').trim();
+                  const teacherIds = (subjectTeacherMap[sid] || []).join(',');
+                  const teacherNames = subjTeacherNames[sid] || '';
+                  const metaParts = [];
+                  if (major) metaParts.push(esc(major));
+                  if (teacherNames) metaParts.push('อ.' + esc(teacherNames));
+                  return `
+                    <label class="be-subj-row" data-major="${esc(major)}" data-teachers="${esc(teacherIds)}" data-name="${esc((s.subject_name || '').toLowerCase())}" style="display:flex;align-items:center;gap:.6rem;padding:.4rem 0;cursor:pointer;border-bottom:1px solid #f3f4f6;">
+                      <input type="checkbox" class="be-subj-chk" value="${esc(sid)}" onchange="updateBulkEnrollPreview()">
+                      <span style="flex:1;">
+                        <div>${esc(s.subject_name)}</div>
+                        ${metaParts.length ? `<div style="font-size:.78rem;color:#6b7280;margin-top:1px;">${metaParts.join(' • ')}</div>` : ''}
+                      </span>
+                    </label>
+                  `;
+                }).join('')
+            }
+          </div>
+        </div>
+        <div id="be-preview" style="padding:.85rem 1rem;background:#e8eaf6;border-left:4px solid #1a237e;border-radius:8px;color:#1a237e;font-weight:600;line-height:1.7;margin-top:.5rem;">
+          📌 เลือกห้องและวิชาเพื่อดูผลลัพธ์
+        </div>
+      `;
+
+      openModal('📝 ลงทะเบียนนักเรียนทั้งห้องเข้าวิชา', body, async () => {
+        const classId = document.getElementById('be-class').value;
+        const subjectIds = Array.from(document.querySelectorAll('.be-subj-chk:checked')).map(c => c.value);
+        if (!classId) throw new Error('กรุณาเลือกห้อง');
+        if (subjectIds.length === 0) throw new Error('กรุณาเลือกอย่างน้อย 1 วิชา');
+        const res = await bulkEnroll(classId, subjectIds);
+        showAlert(`ลงทะเบียนสำเร็จ: เพิ่ม ${res.added || 0} รายการ`, 'success');
+      });
+      updateBulkEnrollPreview();
+    }
+    window.openBulkEnrollForm = openBulkEnrollForm;
+
+    function toggleAllBulkSubjects(checked) {
+      document.querySelectorAll('.be-subj-chk').forEach(c => c.checked = checked);
+      updateBulkEnrollPreview();
+    }
+    window.toggleAllBulkSubjects = toggleAllBulkSubjects;
+
+    function applyBulkSubjectFilter() {
+      const q   = (document.getElementById('be-search')?.value || '').toLowerCase().trim();
+      const mj  = (document.getElementById('be-flt-major')?.value || '').trim();
+      const tch = (document.getElementById('be-flt-teacher')?.value || '').trim();
+      let shown = 0;
+      document.querySelectorAll('.be-subj-row').forEach(row => {
+        const name = row.getAttribute('data-name') || '';
+        const major = row.getAttribute('data-major') || '';
+        const tlist = (row.getAttribute('data-teachers') || '').split(',').filter(Boolean);
+        const okQ  = !q || name.indexOf(q) >= 0;
+        const okMj = !mj || major === mj;
+        const okT  = !tch || tlist.indexOf(tch) >= 0;
+        const visible = okQ && okMj && okT;
+        row.style.display = visible ? 'flex' : 'none';
+        if (visible) shown++;
+      });
+      const cs = document.getElementById('be-count-shown'); if (cs) cs.textContent = shown;
+      updateBulkEnrollPreview();
+    }
+    window.applyBulkSubjectFilter = applyBulkSubjectFilter;
+
+    function toggleFilteredBulkSubjects(checked) {
+      document.querySelectorAll('.be-subj-row').forEach(row => {
+        if (row.style.display !== 'none') {
+          const cb = row.querySelector('.be-subj-chk');
+          if (cb) cb.checked = checked;
+        }
+      });
+      updateBulkEnrollPreview();
+    }
+    window.toggleFilteredBulkSubjects = toggleFilteredBulkSubjects;
+
+    function updateBulkEnrollPreview() {
+      const preview = document.getElementById('be-preview');
+      if (!preview) return;
+      const classId = document.getElementById('be-class')?.value || '';
+      const subjIds = Array.from(document.querySelectorAll('.be-subj-chk:checked')).map(c => c.value);
+      const cnt = document.getElementById('be-count-sel'); if (cnt) cnt.textContent = subjIds.length;
+
+      if (subjIds.length === 0) { preview.innerHTML = '📌 กรุณาเลือกอย่างน้อย 1 วิชา'; return; }
+
+      const st = enrollState;
+      const subjMap = Object.fromEntries(st.subjects.map(s => [String(s.subject_id), s]));
+      const schedCounts = st.scheduleCounts || {};
+
+      const listHtml = subjIds.map((sid, idx) => {
+        const s = subjMap[String(sid)] || {};
+        const tNames = (st.subjectTeacherMap[String(sid)] || [])
+          .map(tid => st.teacherMap[tid] || tid).filter(Boolean).join(', ');
+        const sc = schedCounts[String(sid)];
+        let schedHtml = '';
+        if (sc && sc.days > 0) {
+          const range = (sc.firstDate && sc.lastDate)
+            ? (sc.firstDate === sc.lastDate
+                ? fmtThaiShort(sc.firstDate)
+                : fmtThaiShort(sc.firstDate) + ' – ' + fmtThaiShort(sc.lastDate))
+            : '';
+          schedHtml = `<div style="font-size:.78rem;color:#0c4a6e;margin-top:2px;font-weight:400;">📅 ${sc.days} วัน • ${sc.periods} คาบ${range ? ' • <span style="color:#475569;">' + range + '</span>' : ''}</div>`;
+        } else {
+          schedHtml = `<div style="font-size:.78rem;color:#b45309;margin-top:2px;font-weight:400;">📅 <i>ยังไม่มีตารางสอน</i></div>`;
+        }
+        return `<div style="padding:.35rem .55rem;background:#fff;border-radius:6px;margin-top:.3rem;border:1px solid #c5cae9;color:#1a237e;font-weight:500;display:flex;align-items:center;gap:.4rem;">
+          <span style="min-width:1.8rem;color:#6b7280;">${idx + 1}.</span>
+          <span style="flex:1;">
+            📚 <b>${esc(s.subject_name || sid)}</b>
+            ${tNames ? `<div style="font-size:.78rem;color:#475569;margin-top:1px;font-weight:400;">👨‍🏫 อ.${esc(tNames)}</div>` : ''}
+            ${schedHtml}
+          </span>
+          <button type="button" onclick="removeBulkSubject('${esc(sid)}')" title="ลบออกจากรายการ" style="background:#fee2e2;color:#b91c1c;border:none;border-radius:6px;width:30px;height:30px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>`;
+      }).join('');
+      const listBlock = `
+        <div style="margin-top:.6rem;padding-top:.5rem;border-top:1px dashed #c5cae9;">
+          <div style="font-size:.85rem;color:#1a237e;margin-bottom:.2rem;">📋 วิชาที่เลือก (${subjIds.length}):</div>
+          ${listHtml}
+        </div>`;
+
+      if (!classId) {
+        preview.innerHTML = `📌 กรุณาเลือกห้อง (เลือกวิชาแล้ว ${subjIds.length} วิชา)${listBlock}`;
+        return;
+      }
+
+      // นักเรียนใน class นี้
+      const inClass = st.students.filter(s => String(s.class_id) === String(classId) && s.status === 'active');
+      if (inClass.length === 0) {
+        preview.innerHTML = '⚠️ ห้องที่เลือกยังไม่มีนักเรียน (หรือนักเรียนถูกปิดใช้งาน) — เพิ่มนักเรียนในแท็บ 👥 นักเรียน ก่อน' + listBlock;
+        return;
+      }
+
+      // ตรวจซ้ำกับ enrollments
+      const enrollKey = new Set(st.enrollments.map(e => `${e.student_id}|${e.subject_id}`));
+      let newCount = 0, dupCount = 0;
+      subjIds.forEach(sid => {
+        inClass.forEach(stu => {
+          if (enrollKey.has(`${stu.student_id}|${sid}`)) dupCount++; else newCount++;
+        });
+      });
+
+      preview.innerHTML = `
+        👥 ห้องนี้มี <b>${inClass.length}</b> คน × <b>${subjIds.length}</b> วิชา = <b>${inClass.length * subjIds.length}</b> รายการ<br>
+        ✅ จะเพิ่มใหม่: <b style="color:#1b5e20;">${newCount}</b> รายการ
+        &nbsp;|&nbsp;
+        ⏭ ซ้ำของเดิม (ข้าม): <b style="color:#6c757d;">${dupCount}</b> รายการ
+        ${listBlock}
+      `;
+    }
+    window.updateBulkEnrollPreview = updateBulkEnrollPreview;
+
+    function removeBulkSubject(subjectId) {
+      const sid = String(subjectId);
+      document.querySelectorAll('.be-subj-chk').forEach(c => {
+        if (String(c.value) === sid) c.checked = false;
+      });
+      updateBulkEnrollPreview();
+    }
+    window.removeBulkSubject = removeBulkSubject;
+
+    // ============================================
+    // 6. USERS
+    // ============================================
+    async function renderUsers() {
+      if (ctx.teachers.length === 0) ctx.teachers = await listTeachers({ limit: 500 });
+      const users = await listUsers();
+      const teachOpts = ctx.teachers.map(t => `<option value="${esc(t.teacher_id)}">${esc(t.teacher_id)} — ${esc(t.full_name)}</option>`).join('');
+
+      document.getElementById('admin-content').innerHTML = `
+        <div class="flex mb-4 gap-2" style="justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:.75rem;">
+          <input id="users-search" class="form-control form-control-sm" placeholder="🔍 email/ชื่อ/รหัสครู/username" style="width:280px;" />
+          <div class="text-muted" style="font-size:.9rem;">ทั้งหมด <b>${users.length}</b> users</div>
+        </div>
+        <div class="hint" style="margin-bottom:.5rem;">💡 คลิก <b>✏️ แก้ไข</b> เพื่อเปลี่ยน Role / Username / สถานะ</div>
+        <div class="table-wrapper" style="overflow-x:auto;">
+          <table class="table table-hover" style="font-size:.9rem;">
+            <thead style="background:#f0f2f5;">
+              <tr>
+                <th>Email</th>
+                <th>Username</th>
+                <th>Role</th>
+                <th>TeacherID</th>
+                <th>ชื่อจริง</th>
+                <th>Status</th>
+                <th>เปลี่ยนรหัส</th>
+                <th style="width:130px;">การดำเนินการ</th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody"></tbody>
+          </table>
+        </div>
+      `;
+      const renderRows = () => {
+        const q = (document.getElementById('users-search').value || '').toLowerCase();
+        const list = q ? users.filter(u =>
+          (u.email || '').toLowerCase().includes(q) ||
+          (u.full_name || '').toLowerCase().includes(q) ||
+          (u.teacher_id || '').toLowerCase().includes(q)
+        ) : users;
+        const tbody = document.getElementById('users-tbody');
+        const roleLabel = (r) => ({ user: 'user (ครู)', executive: 'executive (ผู้บริหาร)', admin: 'admin (ผู้ดูแล)' }[r] || r);
+        const roleBg = (r) => ({ admin:'#dc2626', executive:'#7c3aed', user:'#1d4ed8' }[r] || '#6b7280');
+
+        tbody.innerHTML = list.length === 0
+          ? `<tr><td colspan="8" class="text-muted" style="text-align:center;padding:1rem;">ไม่พบ</td></tr>`
+          : list.map(u => `
+            <tr>
+              <td>${esc(u.email)}</td>
+              <td>${u.username ? `<code style="background:#fff3cd;padding:.1rem .4rem;border-radius:4px;color:#856404;font-weight:600;">${esc(u.username)}</code>` : '<span class="text-muted">—</span>'}</td>
+              <td><span class="badge" style="background:${roleBg(u.role)};color:#fff;padding:.2rem .55rem;">${esc(roleLabel(u.role))}</span></td>
+              <td>${u.teacher_id ? `<code>${esc(u.teacher_id)}</code>` : '<span class="text-muted">—</span>'}</td>
+              <td>${esc(u.teachers?.full_name || u.full_name || '-')}</td>
+              <td>${u.status === 'active' ? '<span class="badge bg-success">active</span>' : '<span class="badge bg-secondary">inactive</span>'}</td>
+              <td>${u.must_change_password ? '<span class="text-danger"><i class="fas fa-exclamation-triangle"></i> ใช่</span>' : '<span class="text-success">ไม่</span>'}</td>
+              <td>
+                <div class="d-flex gap-1">
+                  <button class="btn btn-sm btn-secondary" data-uid="${esc(u.id)}" data-act="edit"><i class="fas fa-edit"></i> แก้ไข</button>
+                  <button class="btn btn-sm btn-warning" data-uid="${esc(u.id)}" data-act="reset" title="Reset flag เปลี่ยนรหัสครั้งหน้า"><i class="fas fa-redo"></i></button>
+                </div>
+              </td>
+            </tr>
+          `).join('');
+        tbody.querySelectorAll('button[data-act="edit"]').forEach(b => {
+          b.onclick = () => openUserEditModal(list.find(u => u.id === b.dataset.uid));
+        });
+        tbody.querySelectorAll('button[data-act="reset"]').forEach(b => {
+          b.onclick = async () => {
+            if (!confirm('Reset flag must_change_password เป็น TRUE? user จะถูกบังคับเปลี่ยนรหัสครั้งหน้า')) return;
+            try { await updateUserRole(b.dataset.uid, { must_change_password: true }); showAlert('done', 'success'); await renderUsers(); }
+            catch (e) { showAlert(e.message, 'error', 0); }
+          };
+        });
+      };
+
+      function openUserEditModal(u) {
+        if (!u) return;
+        const r = u;
+        const teacherOpts = '<option value="">— ไม่ผูก —</option>' + ctx.teachers.map(t =>
+          `<option value="${esc(t.teacher_id)}" ${r.teacher_id === t.teacher_id ? 'selected' : ''}>${esc(t.teacher_id)} — ${esc(t.full_name)}</option>`
+        ).join('');
+        openModal(`✏️ แก้ไขผู้ใช้ — ${esc(r.email)}`, `
+          <div class="row g-2">
+            <div class="col-12"><label class="form-label fw-bold">Email</label><input class="form-control" value="${esc(r.email)}" readonly /></div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-bold">Username <small style="color:var(--text-2);">(สำหรับ login สั้นๆ)</small></label>
+              <input id="u-username" class="form-control" value="${esc(r.username || '')}" placeholder="เช่น director, admin2" />
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-bold">ชื่อจริง</label>
+              <input id="u-name" class="form-control" value="${esc(r.full_name || '')}" placeholder="(ใช้สำหรับ admin/executive ที่ไม่ผูกครู)" />
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label fw-bold">Role *</label>
+              <select id="u-role" class="form-control form-select">
+                <option value="user"      ${r.role === 'user'      ? 'selected' : ''}>user (ครู)</option>
+                <option value="executive" ${r.role === 'executive' ? 'selected' : ''}>executive (ผู้บริหาร)</option>
+                <option value="admin"     ${r.role === 'admin'     ? 'selected' : ''}>admin (ผู้ดูแล)</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label fw-bold">Status</label>
+              <select id="u-status" class="form-control form-select">
+                <option value="active"   ${r.status === 'active'   ? 'selected' : ''}>active</option>
+                <option value="inactive" ${r.status === 'inactive' ? 'selected' : ''}>inactive</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label fw-bold">ผูกกับ TeacherID</label>
+              <select id="u-teacher" class="form-control form-select">${teacherOpts}</select>
+            </div>
+            <div class="col-12">
+              <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.9rem;">
+                <input type="checkbox" id="u-must-change" ${r.must_change_password ? 'checked' : ''} />
+                <span>บังคับให้เปลี่ยนรหัสตอน login ครั้งหน้า</span>
+              </label>
+            </div>
+          </div>
+        `, async () => {
+          const patch = {
+            username:    document.getElementById('u-username').value.trim() || null,
+            full_name:   document.getElementById('u-name').value.trim() || null,
+            role:        document.getElementById('u-role').value,
+            status:      document.getElementById('u-status').value,
+            teacher_id:  document.getElementById('u-teacher').value || null,
+            must_change_password: document.getElementById('u-must-change').checked
+          };
+          await updateUserRole(r.id, patch);
+        });
+      }
+      document.getElementById('users-search').addEventListener('input', debounce(renderRows, 200));
+      renderRows();
+    }
+
+    // ============================================
+    // 7. LOGS
+    // ============================================
+    async function renderLogs() {
+      const { data, error } = await supabase
+        .from('logs')
+        .select('*, users(email, full_name)')
+        .order('created_at', { ascending: false })
+        .limit(500);
+      if (error) throw error;
+
+      document.getElementById('admin-content').innerHTML = `
+        <div class="flex mb-4 gap-2" style="justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:.75rem;">
+          <input id="logs-search" class="form-control form-control-sm" placeholder="🔍 action/user" style="width:240px;" />
+          <div class="text-muted" style="font-size:.9rem;">แสดง <b>${data.length}</b> รายการล่าสุด (max 500)</div>
+        </div>
+        <div class="table-wrapper" style="overflow-x:auto;max-height:600px;overflow-y:auto;">
+          <table class="table table-hover" style="font-size:.85rem;">
+            <thead style="background:#f0f2f5;position:sticky;top:0;">
+              <tr><th>เวลา</th><th>User</th><th>Action</th><th>Metadata</th></tr>
+            </thead>
+            <tbody id="logs-tbody"></tbody>
+          </table>
+        </div>
+      `;
+      const renderRows = () => {
+        const q = (document.getElementById('logs-search').value || '').toLowerCase();
+        const list = q ? (data || []).filter(l =>
+          (l.action || '').toLowerCase().includes(q) ||
+          (l.users?.email || '').toLowerCase().includes(q) ||
+          (l.users?.full_name || '').toLowerCase().includes(q)
+        ) : data;
+        const tbody = document.getElementById('logs-tbody');
+        tbody.innerHTML = list.length === 0
+          ? `<tr><td colspan="4" class="text-muted" style="text-align:center;padding:1rem;">ไม่พบ</td></tr>`
+          : list.map(l => `
+            <tr>
+              <td style="white-space:nowrap;font-size:.8rem;">${new Date(l.created_at).toLocaleString('th-TH')}</td>
+              <td>${esc(l.users?.full_name || l.users?.email || '-')}</td>
+              <td><span class="badge bg-info">${esc(l.action)}</span></td>
+              <td><code style="font-size:.75rem;color:var(--text-2);">${esc(JSON.stringify(l.metadata || {}))}</code></td>
+            </tr>
+          `).join('');
+      };
+      document.getElementById('logs-search').addEventListener('input', debounce(renderRows, 200));
+      renderRows();
+    }
+
+    // ===== Helpers =====
+    function badge(status) {
+      const cls = status === 'active' ? 'bg-success' : 'bg-secondary';
+      return `<span class="badge ${cls}">${esc(status || '-')}</span>`;
+    }
+    function debounce(fn, ms = 200) {
+      let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+    }
+
+    // initial
+    await renderTeachers();
+  </script>
+
+  <style>
+    /* Tabs */
+    .tabs-admin {
+      display: flex; gap: 4px;
+      border-bottom: 2px solid var(--border);
+      margin-top: .5rem; margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .tabs-admin .tab {
+      padding: .65rem 1.2rem;
+      background: none; border: none;
+      color: var(--text-2); font-weight: 600;
+      border-bottom: 3px solid transparent;
+      cursor: pointer;
+      font-size: .95rem;
+      margin-bottom: -2px;
+    }
+    .tabs-admin .tab:hover { color: var(--primary); }
+    .tabs-admin .tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    /* Student tree */
+    .stu-tree { padding: 0; }
+    .stu-major summary { list-style: none; }
+    .stu-major summary::-webkit-details-marker { display: none; }
+    .stu-major summary::before {
+      content: '▼'; margin-right: .5rem;
+      transition: transform .15s;
+      display: inline-block;
+    }
+    .stu-major:not([open]) summary::before { transform: rotate(-90deg); }
+    .stu-level summary {
+      cursor: pointer; padding: .5rem .75rem;
+      background: #f0f2f5;
+      border-radius: 6px;
+      margin: .5rem 0;
+      list-style: none;
+    }
+    .stu-level summary::-webkit-details-marker { display: none; }
+    .stu-level summary::before {
+      content: '▼'; margin-right: .5rem;
+      transition: transform .15s;
+      display: inline-block;
+      font-size: .8rem;
+    }
+    .stu-level:not([open]) summary::before { transform: rotate(-90deg); }
+    .stu-year-head {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: .5rem .75rem;
+      color: var(--primary);
+      font-weight: 600;
+      font-size: .95rem;
+    }
+    .stu-group-row {
+      display: flex; align-items: center; gap: .5rem;
+      padding: .65rem 1rem;
+      background: #fff; border: 1px solid var(--border);
+      border-radius: 6px; margin-bottom: .35rem;
+      cursor: pointer; transition: all .15s;
+      font-size: .9rem;
+    }
+    .stu-group-row:hover {
+      border-color: var(--primary);
+      transform: translateX(2px);
+      box-shadow: 0 2px 6px rgba(0,0,0,.05);
+    }
+    .stu-count-badge {
+      background: var(--primary); color: #fff;
+      padding: 2px 10px; border-radius: 999px;
+      font-size: .8rem; font-weight: 600;
+      margin-left: auto;
+    }
+
+    /* Modal */
+    .modal-bg {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.55);
+      z-index: 9999;
+      padding: 1rem;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    .modal-bg[style*="flex"] { display: flex !important; }
+    .modal-card {
+      background: #fff; border-radius: 12px;
+      width: 100%; max-width: 900px;
+      max-height: calc(100vh - 2rem);
+      overflow-y: auto;
+      padding: 24px;
+      box-shadow: 0 10px 40px rgba(0,0,0,.35);
+      position: relative;
+      margin: 0 auto;
+    }
+    .modal-title { color: var(--primary); font-weight: 700; font-size: 1.2rem; margin-bottom: 1rem; }
+    .modal-close {
+      position: absolute; top: 12px; right: 16px;
+      background: none; border: none; font-size: 26px;
+      cursor: pointer; color: var(--text-2);
+    }
+    body.modal-open { overflow: hidden; }
+
+    .table { width: 100%; }
+    .text-muted { color: var(--text-2); }
+  </style>
+</body>
+</html>

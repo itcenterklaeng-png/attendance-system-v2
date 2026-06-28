@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#1a237e" />
+  <title>เข้าสู่ระบบ — ระบบเช็คชื่อนักเรียน</title>
+  <link rel="icon" href="https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DLEchopSbfi&sz=w128" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/app.css" />
+  <style>
+    /* ⭐ Force Sarabun — override Bootstrap */
+    html, body, button, input, select, textarea, .form-control, .btn,
+    h1, h2, h3, h4, h5, h6, p, span, div, a, label {
+      font-family: 'Sarabun', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    }
+    code { font-family: 'Cascadia Code', 'Consolas', monospace !important; }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="logo-circle" style="background:#fff;padding:6px;">
+          <img src="https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DLEchopSbfi&sz=w256"
+               alt="โลโก้วิทยาลัย"
+               style="width:100%;height:100%;object-fit:contain;" />
+        </div>
+        <div class="login-title">วิทยาลัยการอาชีพแกลง</div>
+        <div class="login-subtitle">ระบบเช็คชื่อนักเรียน</div>
+      </div>
+
+      <div id="login-status"></div>
+
+      <form id="login-form">
+        <div class="form-group">
+          <label class="form-label fw-bold" for="login-username">ชื่อผู้ใช้ / รหัสครู / Email</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="fas fa-user"></i></span>
+            <input type="text" id="login-username" class="form-control"
+                   autocomplete="username" placeholder="เช่น director / t001 / xxx@email.com" required autofocus />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label fw-bold" for="login-password">รหัสผ่าน</label>
+          <div class="input-group" style="position:relative;">
+            <span class="input-group-text"><i class="fas fa-lock"></i></span>
+            <input type="password" id="login-password" class="form-control"
+                   autocomplete="current-password" placeholder="password" required
+                   style="padding-right:42px;" />
+            <button type="button" tabindex="-1" id="toggle-pwd"
+                    title="แสดงรหัสผ่าน"
+                    style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:transparent;border:none;color:#6b7280;width:32px;height:32px;cursor:pointer;z-index:5;display:flex;align-items:center;justify-content:center;">
+              <i class="fas fa-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-login" id="login-btn">
+          <i class="fas fa-sign-in-alt me-2"></i>เข้าสู่ระบบ
+        </button>
+      </form>
+
+      <div class="login-hint">
+        <i class="fas fa-info-circle me-1"></i>
+        รหัสเริ่มต้น <code>123456789</code> — กรุณาเปลี่ยนรหัสตอน login ครั้งแรก
+      </div>
+
+      <div class="login-credit">
+        <div style="font-weight:600;color:var(--text-2,#475569);">พัฒนาโดย</div>
+        <div>ว่าที่ร้อยตรีพงศกร พงษ์พันนา</div>
+        <div style="opacity:.85;">หัวหน้างานศูนย์ดิจิทัลและสื่อสารองค์กร</div>
+        <div style="opacity:.85;">วิทยาลัยการอาชีพแกลง</div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { resolveEmail, signIn, getSession } from './js/auth.js';
+
+    function showStatus(msg, type = 'info') {
+      const colors = {
+        success: 'background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;',
+        error:   'background:#ffebee;color:#c62828;border:1px solid #ffcdd2;',
+        info:    'background:#e3f2fd;color:#0d47a1;border:1px solid #90caf9;',
+        warn:    'background:#fff3cd;color:#856404;border:1px solid #ffeeba;'
+      };
+      const icon = { success: 'check-circle', error: 'exclamation-circle', warn: 'exclamation-triangle', info: 'info-circle' }[type] || 'info-circle';
+      document.getElementById('login-status').innerHTML =
+        `<div style="${colors[type]} padding:.7rem 1rem;border-radius:.5rem;margin-bottom:1rem;font-size:.9rem;">
+          <i class="fas fa-${icon} me-1"></i>${msg}
+        </div>`;
+    }
+
+    // ถ้า login อยู่แล้ว → ไป home
+    (async () => {
+      const session = await getSession();
+      if (session) window.location.href = 'attendance.html';
+    })();
+
+    // 👁️ toggle
+    document.getElementById('toggle-pwd').addEventListener('click', () => {
+      const inp = document.getElementById('login-password');
+      const ic  = document.querySelector('#toggle-pwd i');
+      if (inp.type === 'password') { inp.type = 'text'; ic.className = 'fas fa-eye-slash'; }
+      else { inp.type = 'password'; ic.className = 'fas fa-eye'; }
+    });
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('login-btn');
+      btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>กำลังเข้าสู่ระบบ...';
+
+      const username = document.getElementById('login-username').value.trim();
+      const password = document.getElementById('login-password').value;
+
+      try {
+        const email = await resolveEmail(username);
+        if (email !== username) showStatus(`พบ <b>${username}</b> → ${email}`, 'info');
+        await signIn(email, password);
+        showStatus('เข้าสู่ระบบสำเร็จ! กำลังพาคุณไป...', 'success');
+        setTimeout(() => window.location.href = 'attendance.html', 600);
+      } catch (e) {
+        const m = (e?.message || '').toLowerCase();
+        let msg = e?.message || 'เกิดข้อผิดพลาด';
+        if (m.includes('invalid login')) msg = 'ชื่อผู้ใช้/Email หรือรหัสผ่านไม่ถูกต้อง';
+        else if (m.includes('email not confirmed')) msg = 'Email ยังไม่ยืนยัน — ติดต่อ admin';
+        showStatus(msg, 'error');
+        btn.disabled = false; btn.innerHTML = '<i class="fas fa-sign-in-alt me-2"></i>เข้าสู่ระบบ';
+      }
+    });
+  </script>
+</body>
+</html>

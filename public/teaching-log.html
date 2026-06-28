@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#1a237e" />
+  <title>บันทึกหลังสอน — ระบบเช็คชื่อนักเรียน</title>
+  <link rel="icon" href="https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DLEchopSbfi&sz=w128" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div id="alert-area"></div>
+
+  <div class="card">
+    <div class="card-header">
+      <a class="btn btn-sm btn-secondary" href="attendance.html"><i class="fas fa-arrow-left"></i> กลับ</a>
+      <div class="flex-1 text-center">
+        <div class="card-title">📝 บันทึกหลังการสอน</div>
+      </div>
+    </div>
+
+    <div class="row g-2" style="margin-top:.5rem;">
+      <div class="col-12 col-md-6 col-lg-6">
+        <label class="form-label fw-bold">วิชา</label>
+        <select id="sel-subject" class="form-control form-select"><option>กำลังโหลด...</option></select>
+      </div>
+      <div class="col-6 col-md-3 col-lg-3">
+        <label class="form-label fw-bold">จากวันที่</label>
+        <input type="date" id="sel-from" class="form-control" />
+      </div>
+      <div class="col-6 col-md-3 col-lg-3">
+        <label class="form-label fw-bold">ถึงวันที่</label>
+        <input type="date" id="sel-to" class="form-control" />
+      </div>
+    </div>
+
+    <div style="margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap;">
+      <button class="btn btn-primary" id="btn-load"><i class="fas fa-search me-1"></i> โหลดรายการ</button>
+      <button class="btn btn-success" id="btn-new"><i class="fas fa-plus me-1"></i> บันทึกใหม่</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-title"><i class="fas fa-list me-1"></i> รายการบันทึก</div></div>
+    <div id="log-list" class="empty-state">
+      <i class="fas fa-folder-open" style="font-size:2rem;color:var(--text-3);"></i>
+      <p>เลือกวิชาแล้วกดโหลด</p>
+    </div>
+  </div>
+
+  <!-- Modal — ตาม v1 -->
+  <div class="modal-bg" id="modal-bg" style="display:none;">
+    <div class="modal-card">
+      <button class="modal-close" id="modal-close">&times;</button>
+      <div class="modal-title" id="modal-title">📝 บันทึกหลังการสอน</div>
+      <div id="modal-alert"></div>
+
+      <div class="row g-2">
+        <div class="col-12 col-md-6">
+          <label class="form-label fw-bold">วิชา</label>
+          <input id="m-subject" class="form-control" readonly />
+        </div>
+        <div class="col-6 col-md-3">
+          <label class="form-label fw-bold">วันที่</label>
+          <input id="m-date" type="date" class="form-control" required />
+        </div>
+        <div class="col-6 col-md-3">
+          <label class="form-label fw-bold">คาบ</label>
+          <input id="m-periods" class="form-control" placeholder="1,2,3" />
+        </div>
+      </div>
+
+      <!-- 1. รูปภาพ -->
+      <div class="form-group" style="margin-top:.75rem;">
+        <label class="form-label fw-bold">
+          <i class="fas fa-camera me-1" style="color:#0d47a1;"></i> 1. รูปภาพการสอน
+          <span style="color:var(--text-2);font-size:.8rem;font-weight:400;">(จะถูกย่อเป็นกว้าง 800px อัตโนมัติ)</span>
+        </label>
+        <div>
+          <div id="m-image-preview" style="border:2px dashed var(--border-2);border-radius:8px;padding:1rem;text-align:center;min-height:140px;display:flex;align-items:center;justify-content:center;background:#fafbff;">
+            <div id="m-image-empty">
+              <i class="far fa-image" style="font-size:2.5rem;color:#94a3b8;"></i>
+              <div style="margin-top:.4rem;color:var(--text-2);font-size:.85rem;">ยังไม่มีรูปภาพ</div>
+            </div>
+            <img id="m-image-img" style="display:none;max-width:100%;max-height:300px;border-radius:6px;" />
+          </div>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
+            <label class="btn btn-primary btn-sm" style="cursor:pointer;margin:0;">
+              <i class="fas fa-upload me-1"></i> เลือกรูปภาพ
+              <input type="file" id="m-image-input" accept="image/*" style="display:none;" />
+            </label>
+            <button type="button" id="m-image-remove" class="btn btn-danger btn-sm" style="display:none;">
+              <i class="fas fa-trash me-1"></i> ลบรูป
+            </button>
+            <span id="m-image-info" style="align-self:center;color:var(--text-2);font-size:.8rem;"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. สื่อและอุปกรณ์ -->
+      <div class="form-group">
+        <label class="form-label fw-bold" for="m-materials">
+          <i class="fas fa-tools me-1" style="color:#7c3aed;"></i> 2. สื่อและอุปกรณ์ที่ใช้ในการจัดการเรียนการสอน
+        </label>
+        <textarea id="m-materials" class="form-control" rows="3"
+                  placeholder="เช่น เครื่องคอมพิวเตอร์, โปรเจคเตอร์, ใบงาน, สื่อ PowerPoint..."></textarea>
+      </div>
+
+      <!-- 3. รายละเอียดของสิ่งที่ทำการสอน -->
+      <div class="form-group">
+        <label class="form-label fw-bold" for="m-content">
+          <i class="fas fa-book-open me-1" style="color:#1d4ed8;"></i> 3. รายละเอียดของสิ่งที่ทำการสอน
+          <span id="m-content-hint" style="color:#b91c1c;font-weight:500;font-size:.85rem;">(ต้องมีข้อความมากกว่า 50 ตัวอักษร)</span>
+        </label>
+        <textarea id="m-content" class="form-control" rows="4"
+                  placeholder="เนื้อหา, กิจกรรม, ขั้นตอนการสอนของวันนี้..."></textarea>
+        <div style="text-align:right;font-size:.78rem;color:var(--text-2);margin-top:.2rem;">
+          <span id="m-content-count">0</span> / 50 ตัวอักษร
+        </div>
+      </div>
+
+      <!-- 4. วิธีการเสริมแรง -->
+      <div class="form-group">
+        <label class="form-label fw-bold" for="m-motivation">
+          <i class="fas fa-bullseye me-1" style="color:#15803d;"></i> 4. วิธีการเสริมแรงให้ผู้เรียนมีความมุ่งมั่นตั้งใจ
+        </label>
+        <textarea id="m-motivation" class="form-control" rows="3"
+                  placeholder="เช่น ให้คะแนนพิเศษ, ชมเชย, มอบรางวัล, การยกตัวอย่างที่น่าสนใจ..."></textarea>
+      </div>
+
+      <!-- 5. ผลการจัดการเรียนการสอน -->
+      <div class="form-group">
+        <label class="form-label fw-bold" for="m-results">
+          <i class="fas fa-flag-checkered me-1" style="color:#0891b2;"></i> 5. ผลการจัดการเรียนการสอน
+        </label>
+        <textarea id="m-results" class="form-control" rows="3"
+                  placeholder="ผลที่เกิดขึ้น, นักเรียนได้เรียนรู้อะไร, บรรลุวัตถุประสงค์เพียงใด..."></textarea>
+      </div>
+
+      <!-- 6. ปัญหาและอุปสรรค -->
+      <div class="form-group">
+        <label class="form-label fw-bold" for="m-problems">
+          <i class="fas fa-exclamation-triangle me-1" style="color:#b91c1c;"></i> 6. ปัญหาและอุปสรรคในการจัดการเรียนการสอน
+        </label>
+        <textarea id="m-problems" class="form-control" rows="3"
+                  placeholder="ปัญหาที่พบ, สิ่งที่ทำให้ไม่บรรลุเป้าหมาย, ข้อจำกัด..."></textarea>
+      </div>
+
+      <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);position:sticky;bottom:-24px;background:#fff;padding-bottom:0;margin-bottom:-24px;padding-bottom:24px;">
+        <button class="btn btn-secondary" id="modal-cancel">ยกเลิก</button>
+        <button class="btn btn-primary btn-lg" id="btn-save-log">
+          <i class="fas fa-save me-1"></i> บันทึก
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth } from './js/auth.js';
+    import { initLayout } from './js/layout.js';
+    import { getMySubjects, listTeachingLogs, saveTeachingLog, deleteTeachingLog, uploadTeachingLogImage } from './js/api.js';
+    import { supabase } from './js/supabase-client.js';
+    import { showAlert, todayISO, formatThaiDate, esc } from './js/utils.js';
+
+    const profile = await requireAuth();
+    if (!profile) throw new Error('not authed');
+    initLayout(profile, 'teaching-log', { title: 'บันทึกหลังสอน', icon: 'fa-edit' });
+
+    const elSubject = document.getElementById('sel-subject');
+    const elFrom    = document.getElementById('sel-from');
+    const elTo      = document.getElementById('sel-to');
+    const elList    = document.getElementById('log-list');
+    const modalBg   = document.getElementById('modal-bg');
+    let editingId = null, currentLogs = [];
+
+    // default = 30 วันย้อนหลัง
+    const today = new Date();
+    const past = new Date(today); past.setDate(past.getDate() - 30);
+    elFrom.value = past.toISOString().slice(0,10);
+    elTo.value   = todayISO();
+
+    try {
+      let subjects;
+      if (profile.role === 'admin') {
+        const { data } = await supabase.from('subjects').select('subject_id, subject_name').order('subject_id');
+        subjects = data || [];
+      } else {
+        subjects = await getMySubjects(profile.teacher_id);
+      }
+      elSubject.innerHTML = '<option value="">— ทุกวิชา —</option>' +
+        subjects.map(s => `<option value="${esc(s.subject_id)}">${esc(s.subject_id)} — ${esc(s.subject_name)}</option>`).join('');
+      const params = new URLSearchParams(location.search);
+      const wanted = params.get('subject');
+      if (wanted) elSubject.value = wanted;
+      await loadLogs();
+    } catch (e) { showAlert('โหลดวิชา fail: ' + e.message, 'error', 0); }
+
+    document.getElementById('btn-load').onclick = loadLogs;
+    document.getElementById('btn-new').onclick  = () => openModal(null);
+    document.getElementById('btn-save-log').onclick = saveLog;
+    document.getElementById('modal-close').onclick = closeModal;
+    document.getElementById('modal-cancel').onclick = closeModal;
+    function closeModal() {
+      modalBg.style.display = 'none';
+      document.body.classList.remove('modal-open');
+      editingId = null;
+    }
+    // ปิด modal ด้วย Escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modalBg.style.display === 'flex') closeModal();
+    });
+
+    window._editLog = (id) => { const l = currentLogs.find(x => x.id === id); if (l) openModal(l); };
+    window._deleteLog = async (id) => {
+      if (!confirm('ลบบันทึกนี้?')) return;
+      try { await deleteTeachingLog(id); showAlert('ลบแล้ว', 'success'); await loadLogs(); }
+      catch (e) { showAlert('ลบ fail: ' + e.message, 'error', 0); }
+    };
+
+    async function loadLogs() {
+      elList.innerHTML = '<div class="empty-state"><div class="spinner" style="margin:0 auto 1rem;"></div><p>กำลังโหลด...</p></div>';
+      try {
+        const params = { subjectId: elSubject.value || null, dateFrom: elFrom.value, dateTo: elTo.value };
+        if (profile.role !== 'admin' && profile.teacher_id) params.teacherId = profile.teacher_id;
+        currentLogs = await listTeachingLogs(params);
+        renderLogs(currentLogs);
+      } catch (e) {
+        elList.innerHTML = `<div class="alert alert-error">โหลด fail: ${esc(e.message)}</div>`;
+      }
+    }
+
+    function renderLogs(logs) {
+      if (logs.length === 0) {
+        elList.innerHTML = '<div class="empty-state"><i class="fas fa-folder-open" style="font-size:2rem;color:var(--text-3);"></i><p>ไม่มีบันทึก — กด "บันทึกใหม่" เพื่อเริ่ม</p></div>';
+        return;
+      }
+      elList.innerHTML = logs.map(l => `
+        <div class="log-row" onclick="_editLog(${l.id})">
+          <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+            <div style="font-weight:700;color:var(--primary);min-width:120px;">${esc(formatThaiDate(l.date))}</div>
+            <span class="badge bg-secondary">คาบ ${esc(l.periods || '-')}</span>
+            <span style="font-size:.85rem;color:var(--text-2);"><code>${esc(l.subject_id)}</code> · ${esc(l.subject_name || '-')}</span>
+          </div>
+          <div style="color:var(--text-2);font-size:.9rem;margin-top:.4rem;">
+            ${esc((l.content || l.objectives || '(ยังไม่มีเนื้อหา)').slice(0, 150))}${(l.content || '').length > 150 ? '...' : ''}
+          </div>
+          <div class="log-actions" onclick="event.stopPropagation()">
+            <button class="btn btn-sm btn-outline-primary" onclick="_editLog(${l.id})"><i class="fas fa-edit"></i> แก้</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="_deleteLog(${l.id})"><i class="fas fa-trash"></i></button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ===== Image handling — upload เข้า Supabase Storage =====
+    let currentImageUrl = null;     // URL ของรูปที่บันทึก (เก่า หรือใหม่ที่อัพโหลดแล้ว)
+    let pendingBlob = null;         // Blob ใหม่ที่ยังไม่ได้อัพโหลด
+    let pendingDataUrl = null;      // base64 สำหรับ preview ก่อนอัพโหลด
+
+    document.getElementById('m-image-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const { blob, dataUrl } = await resizeImageToBlob(file, 1200);
+        pendingBlob = blob;
+        pendingDataUrl = dataUrl;
+        showImagePreview(dataUrl, file);
+      } catch (err) {
+        showAlert('โหลดรูปไม่สำเร็จ: ' + err.message, 'error', 0);
+      }
+    });
+    document.getElementById('m-image-remove').onclick = () => {
+      currentImageUrl = null;
+      pendingBlob = null;
+      pendingDataUrl = null;
+      document.getElementById('m-image-input').value = '';
+      showImagePreview(null);
+    };
+
+    // แปลง Google Drive URL หลายแบบ → ทดลองหา URL ที่โหลดได้
+    function gdriveFallbacks(url) {
+      if (!url) return [];
+      // ถ้าเป็น base64 ใช้เลย
+      if (url.startsWith('data:')) return [url];
+      // หา file ID
+      let id = null;
+      const m1 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+      const m2 = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+      if (m1) id = m1[1];
+      else if (m2) id = m2[1];
+      if (!id) return [url];
+      return [
+        `https://drive.google.com/thumbnail?id=${id}&sz=w800`,
+        `https://lh3.googleusercontent.com/d/${id}=w800`,
+        `https://drive.google.com/uc?export=view&id=${id}`,
+        url   // ตัวเดิม
+      ];
+    }
+
+    function showImagePreview(dataUrl, file) {
+      const empty = document.getElementById('m-image-empty');
+      const img   = document.getElementById('m-image-img');
+      const btn   = document.getElementById('m-image-remove');
+      const info  = document.getElementById('m-image-info');
+
+      if (dataUrl) {
+        empty.style.display = 'none';
+        btn.style.display = '';
+
+        if (dataUrl.startsWith('data:')) {
+          // base64 อัพโหลดใหม่
+          img.src = dataUrl;
+          img.style.display = '';
+          const size = file ? `${(file.size/1024).toFixed(0)} KB → ` : '';
+          const compressed = Math.round(dataUrl.length * 0.75 / 1024);
+          info.textContent = `${size}บีบเหลือ ${compressed} KB`;
+        } else {
+          // URL — ลองหลาย fallback
+          const urls = gdriveFallbacks(dataUrl);
+          let i = 0;
+          img.onerror = () => {
+            i++;
+            if (i < urls.length) {
+              img.src = urls[i];
+            } else {
+              // โหลดไม่ได้ทั้งหมด
+              img.style.display = 'none';
+              empty.style.display = '';
+              empty.innerHTML = `
+                <i class="fas fa-image" style="font-size:2.5rem;color:#dc2626;"></i>
+                <div style="margin-top:.4rem;color:#dc2626;font-size:.85rem;">โหลดรูปไม่ได้</div>
+                <a href="${dataUrl}" target="_blank" style="font-size:.78rem;color:#1565c0;display:block;margin-top:.3rem;">
+                  <i class="fas fa-external-link-alt me-1"></i> เปิดต้นฉบับใน tab ใหม่
+                </a>
+              `;
+              info.textContent = '';
+            }
+          };
+          img.onload = () => {
+            if (dataUrl.includes('supabase.co')) info.textContent = '(Supabase Storage)';
+            else if (dataUrl.includes('drive.google')) info.textContent = '(Google Drive)';
+            else info.textContent = '';
+          };
+          img.src = urls[0];
+          img.style.display = '';
+        }
+      } else {
+        empty.style.display = '';
+        empty.innerHTML = `
+          <i class="far fa-image" style="font-size:2.5rem;color:#94a3b8;"></i>
+          <div style="margin-top:.4rem;color:var(--text-2);font-size:.85rem;">ยังไม่มีรูปภาพ</div>
+        `;
+        img.style.display = 'none';
+        btn.style.display = 'none';
+        info.textContent = '';
+      }
+    }
+
+    // resize image → คืน blob + dataUrl (สำหรับ preview)
+    function resizeImageToBlob(file, maxWidth = 1200) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const img = new Image();
+          img.onload = () => {
+            const ratio = img.width > maxWidth ? maxWidth / img.width : 1;
+            const w = Math.round(img.width * ratio);
+            const h = Math.round(img.height * ratio);
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            c.getContext('2d').drawImage(img, 0, 0, w, h);
+            c.toBlob((blob) => {
+              if (!blob) return reject(new Error('สร้าง blob ไม่สำเร็จ'));
+              const dataUrl = c.toDataURL('image/jpeg', 0.85);
+              resolve({ blob, dataUrl });
+            }, 'image/jpeg', 0.85);
+          };
+          img.onerror = () => reject(new Error('ไฟล์ไม่ใช่รูปภาพ'));
+          img.src = reader.result;
+        };
+        reader.onerror = () => reject(new Error('อ่านไฟล์ไม่ได้'));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // ===== Character counter =====
+    document.getElementById('m-content').addEventListener('input', (e) => {
+      const len = e.target.value.length;
+      const cnt = document.getElementById('m-content-count');
+      const hint = document.getElementById('m-content-hint');
+      cnt.textContent = len;
+      cnt.style.color = len >= 50 ? 'var(--c-present)' : '#b91c1c';
+      hint.style.display = len >= 50 ? 'none' : '';
+    });
+
+    function openModal(log) {
+      editingId = log?.id || null;
+      document.getElementById('modal-title').textContent = log ? '✏️ แก้ไขบันทึก' : '➕ บันทึกใหม่';
+      document.getElementById('m-subject').value     = log?.subject_id || elSubject.value || '';
+      if (!document.getElementById('m-subject').value) { showAlert('เลือกวิชาก่อน', 'warn', 0); return; }
+      document.getElementById('m-date').value       = log?.date || todayISO();
+      document.getElementById('m-periods').value    = log?.periods || '';
+      document.getElementById('m-materials').value  = log?.materials || '';
+      document.getElementById('m-content').value    = log?.content || '';
+      document.getElementById('m-motivation').value = log?.motivation || '';
+      document.getElementById('m-results').value    = log?.results || '';
+      document.getElementById('m-problems').value   = log?.problems || '';
+      currentImageUrl = log?.image_url || null;
+      pendingBlob = null;
+      pendingDataUrl = null;
+      showImagePreview(currentImageUrl);
+
+      // trigger char counter
+      document.getElementById('m-content').dispatchEvent(new Event('input'));
+
+      modalBg.style.display = 'flex';
+      document.body.classList.add('modal-open');
+      // scroll modal-card ไป top
+      const card = modalBg.querySelector('.modal-card');
+      if (card) card.scrollTop = 0;
+    }
+
+    async function saveLog() {
+      const content = document.getElementById('m-content').value;
+      if (content.length < 50) {
+        showAlert('รายละเอียดของสิ่งที่ทำการสอน (ข้อ 3) ต้องมีอย่างน้อย 50 ตัวอักษร', 'error', 0);
+        document.getElementById('m-content').focus();
+        return;
+      }
+      const subjectId = document.getElementById('m-subject').value;
+      const date = document.getElementById('m-date').value;
+      if (!subjectId || !date) { showAlert('กรุณาเลือกวิชา + วันที่', 'error', 0); return; }
+
+      const btn = document.getElementById('btn-save-log');
+      btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> กำลังบันทึก...';
+
+      try {
+        // 1. ถ้ามีรูปใหม่ที่ยังไม่ได้อัพโหลด → upload เข้า Storage ก่อน
+        let imageUrl = currentImageUrl;
+        if (pendingBlob) {
+          btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> กำลังอัพโหลดรูป...';
+          const { url } = await uploadTeachingLogImage(pendingBlob, { subjectId, ext: 'jpg' });
+          imageUrl = url;
+        }
+
+        // 2. บันทึกข้อมูล log
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> กำลังบันทึก...';
+        await saveTeachingLog({
+          subjectId, date,
+          periods:    document.getElementById('m-periods').value,
+          materials:  document.getElementById('m-materials').value,
+          content,
+          motivation: document.getElementById('m-motivation').value,
+          results:    document.getElementById('m-results').value,
+          problems:   document.getElementById('m-problems').value,
+          imageUrl
+        });
+        showAlert('บันทึกสำเร็จ', 'success');
+        closeModal();
+        await loadLogs();
+      } catch (e) {
+        showAlert('บันทึก fail: ' + e.message, 'error', 0);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save me-1"></i> บันทึก';
+      }
+    }
+  </script>
+
+  <style>
+    .log-row {
+      background: #fff; border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 16px;
+      margin-bottom: 8px; cursor: pointer;
+      transition: all .15s; position: relative;
+    }
+    .log-row:hover { border-color: var(--primary); transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+    .log-actions { position: absolute; top: 10px; right: 12px; display: flex; gap: 4px; }
+    .modal-bg {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.55);
+      z-index: 9999;
+      padding: 1rem;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    .modal-bg[style*="flex"] { display: flex !important; }
+    .modal-card {
+      background: #fff;
+      border-radius: 12px;
+      width: 100%;
+      max-width: 760px;
+      max-height: calc(100vh - 2rem);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 24px;
+      box-shadow: 0 10px 40px rgba(0,0,0,.35);
+      position: relative;
+      margin: 0 auto;
+    }
+    .modal-card::-webkit-scrollbar { width: 10px; }
+    .modal-card::-webkit-scrollbar-track { background: #f0f2f5; border-radius: 0 12px 12px 0; }
+    .modal-card::-webkit-scrollbar-thumb { background: #c5cae9; border-radius: 6px; }
+    .modal-card::-webkit-scrollbar-thumb:hover { background: #9fa8da; }
+    body.modal-open { overflow: hidden; }
+    .modal-title { color: var(--primary); font-weight: 700; font-size: 1.2rem; margin-bottom: 1rem; }
+    .modal-close {
+      position: absolute; top: 12px; right: 16px;
+      background: none; border: none; font-size: 26px;
+      cursor: pointer; color: var(--text-2);
+    }
+    .modal-close:hover { color: var(--danger); }
+  </style>
+</body>
+</html>

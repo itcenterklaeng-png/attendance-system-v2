@@ -1,0 +1,38 @@
+# ⚠ ห้ามให้ secret key หลุด!
+.env
+.env.local
+.env.*.local
+scripts/.env
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build / Cache
+.vercel
+.cache/
+dist/
+build/
+
+# CSV migration (มีข้อมูลส่วนตัวของนักเรียน — ห้าม commit)
+scripts/csv/
+scripts/csv/backup/
+
+# Test / temporary
+test-*.html
+*.log
+*.tmp

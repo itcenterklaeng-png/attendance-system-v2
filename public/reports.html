@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#1a237e" />
+  <title>รายงานการเข้าเรียน — ระบบเช็คชื่อนักเรียน</title>
+  <link rel="icon" href="https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DLEchopSbfi&sz=w128" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div id="alert-area"></div>
+
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">📋 รายงานการเข้าเรียน</div>
+        <div class="card-subtitle" style="color:var(--text-2);font-size:.85rem;">
+          เลือกรายวิชาเพื่อดู / ปริ้นรายงานการเข้าเรียนตลอดภาคการศึกษา
+        </div>
+      </div>
+      <button class="btn btn-secondary btn-sm" id="btn-refresh">
+        <i class="fas fa-sync me-1"></i> รีเฟรช
+      </button>
+    </div>
+
+    <div class="flex" style="gap:.5rem;flex-wrap:wrap;align-items:center;padding:.5rem 0 0;border-top:1px dashed var(--border);margin-top:.5rem;">
+      <i class="fas fa-search" style="color:var(--text-2);"></i>
+      <input type="text" id="reports-search" class="form-control" style="max-width:280px;font-size:.9rem;"
+             placeholder="ค้นหารายวิชา / ห้องเรียน..." />
+      <span id="reports-count" style="margin-left:auto;color:var(--text-2);font-size:.85rem;"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div id="reports-list">
+      <div class="empty-state">
+        <div class="spinner" style="margin:0 auto 1rem;"></div>
+        <p>กำลังโหลดรายวิชา...</p>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth } from './js/auth.js';
+    import { initLayout } from './js/layout.js';
+    import { getTeacherHome } from './js/api.js';
+    import { supabase } from './js/supabase-client.js';
+    import { showAlert, todayISO, formatThaiDate, esc } from './js/utils.js';
+
+    const profile = await requireAuth();
+    if (!profile) throw new Error('not authed');
+    initLayout(profile, 'reports', { title: 'รายงานการเข้าเรียน', icon: 'fa-chart-bar' });
+
+    let allRows = [];   // flatten: 1 row per subject × class
+
+    document.getElementById('btn-refresh').onclick = loadAll;
+    document.getElementById('reports-search').addEventListener('input', debounce(render, 200));
+
+    await loadAll();
+
+    async function loadAll() {
+      document.getElementById('reports-list').innerHTML =
+        '<div class="empty-state"><div class="spinner" style="margin:0 auto 1rem;"></div><p>กำลังโหลด...</p></div>';
+      try {
+        let subjects;
+        if (profile.role === 'admin' && !profile.teacher_id) {
+          const { data, error } = await supabase
+            .from('subjects')
+            .select('subject_id, subject_name, major, course_type, total_hours, start_date, end_date')
+            .order('subject_id');
+          if (error) throw error;
+          subjects = (data || []).map(s => ({
+            ...s,
+            today_periods: null, has_round_1: false, has_round_2: false,
+            classes: []
+          }));
+        } else {
+          subjects = await getTeacherHome(profile.teacher_id, todayISO());
+        }
+        // flatten
+        allRows = [];
+        subjects.forEach(s => {
+          const classes = (Array.isArray(s.classes) && s.classes.length > 0) ? s.classes : [null];
+          classes.forEach(c => allRows.push({ s, c }));
+        });
+        render();
+      } catch (e) {
+        document.getElementById('reports-list').innerHTML =
+          `<div class="alert alert-error">โหลด fail: ${esc(e.message)}</div>`;
+      }
+    }
+
+    function render() {
+      const q = (document.getElementById('reports-search').value || '').toLowerCase();
+      let visible = allRows;
+      if (q) {
+        visible = visible.filter(({ s, c }) => {
+          const hay = ((s.subject_name || '') + ' ' + (s.subject_id || '') + ' ' + (c?.label || '')).toLowerCase();
+          return hay.includes(q);
+        });
+      }
+      // sort: มีคาบวันนี้ก่อน → ชื่อ
+      visible.sort((a, b) => {
+        const aHas = a.s.today_periods ? 0 : 1;
+        const bHas = b.s.today_periods ? 0 : 1;
+        if (aHas !== bHas) return aHas - bHas;
+        return (a.s.subject_name || '').localeCompare(b.s.subject_name || '', 'th');
+      });
+
+      document.getElementById('reports-count').textContent =
+        `${visible.length} รายการ (จาก ${allRows.length})`;
+
+      const list = document.getElementById('reports-list');
+      if (visible.length === 0) {
+        list.innerHTML = `<div class="empty-state">
+          <i class="fas fa-folder-open" style="font-size:2rem;color:var(--text-3);"></i>
+          <p>${q ? 'ไม่พบวิชาที่ตรงกับการค้นหา' : 'ยังไม่มีวิชาที่สอน'}</p>
+        </div>`;
+        return;
+      }
+
+      const ctMap = { normal:'ปกติ', upskill:'Upskill', short:'ระยะสั้น' };
+      list.innerHTML = `
+        <div class="table-wrapper" style="overflow-x:auto;">
+          <table class="table table-hover" style="font-size:.88rem;">
+            <thead style="background:#f0f2f5;">
+              <tr>
+                <th class="text-center" style="width:50px;">ลำดับ</th>
+                <th>รายวิชา</th>
+                <th>ห้องเรียน</th>
+                <th>ภาคการศึกษา</th>
+                <th class="text-center">ชั่วโมง</th>
+                <th>ประเภท</th>
+                <th class="text-center">สถานะวันนี้</th>
+                <th class="text-center" style="width:240px;">การดำเนินการ</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${visible.map(({ s, c }, idx) => {
+                const params = new URLSearchParams({ subject: s.subject_id });
+                if (c?.class_id) params.set('class', c.class_id);
+                const link = 'report-detail.html?' + params.toString();
+
+                const ctLabel = ctMap[s.course_type] || s.course_type || 'ปกติ';
+                const dateRange = (s.start_date && s.end_date)
+                  ? `${formatThaiDate(s.start_date).split(' ').slice(0,3).join(' ')} - ${formatThaiDate(s.end_date).split(' ').slice(0,3).join(' ')}`
+                  : '-';
+
+                const statusBadge = s.has_round_1
+                  ? '<span class="badge bg-success">✓ เช็คแล้ววันนี้</span>'
+                  : (s.today_periods
+                      ? '<span class="badge bg-warning text-dark">⏳ ยังไม่เช็ค</span>'
+                      : '<span class="badge bg-secondary">ไม่มีคาบ</span>');
+
+                const classCell = c
+                  ? `<span style="background:#eef2ff;color:#3730a3;padding:3px 10px;border-radius:6px;font-weight:600;font-size:.83rem;">
+                       <i class="fas fa-users me-1"></i>${esc(c.label)}
+                       <span style="color:#6b7280;font-weight:400;">(${c.student_count} คน)</span>
+                     </span>`
+                  : '<span class="text-muted">-</span>';
+
+                return `
+                  <tr>
+                    <td class="text-center"><b>${idx + 1}</b></td>
+                    <td><i class="fas fa-book me-1" style="color:#94a3b8;"></i><b>${esc(s.subject_name)}</b><br><code style="font-size:.7rem;">${esc(s.subject_id)}</code></td>
+                    <td>${classCell}</td>
+                    <td style="font-size:.85rem;"><i class="far fa-calendar me-1" style="color:#94a3b8;"></i>${esc(dateRange)}</td>
+                    <td class="text-center">${s.total_hours || '-'}</td>
+                    <td><span class="badge" style="background:#e0e7ff;color:#3730a3;">${esc(ctLabel)}</span></td>
+                    <td class="text-center">${statusBadge}</td>
+                    <td class="text-center">
+                      <a class="btn btn-sm btn-secondary" href="${link}" title="ดูรายงาน">
+                        <i class="fas fa-history me-1"></i> ดูรายงาน
+                      </a>
+                      <a class="btn btn-sm btn-success" href="${link}&autoprint=1" title="เปิด + พิมพ์">
+                        <i class="fas fa-print me-1"></i> ปริ้น
+                      </a>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function debounce(fn, ms = 200) {
+      let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+    }
+  </script>
+
+  <style>
+    .text-center { text-align: center; }
+    .text-muted { color: var(--text-2); }
+  </style>
+</body>
+</html>

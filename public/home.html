@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="theme-color" content="#1a237e" />
+  <title>กำลังพาคุณไป...</title>
+  <link rel="stylesheet" href="css/app.css" />
+  <meta http-equiv="refresh" content="0; url=attendance.html" />
+</head>
+<body>
+  <div class="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">กำลังพาคุณไปยังหน้าเช็คชื่อนักเรียน...</div>
+  </div>
+  <script>
+    // redirect ทันที (กันกรณี meta refresh ไม่ทำงาน)
+    window.location.replace('attendance.html');
+  </script>
+</body>
+</html>

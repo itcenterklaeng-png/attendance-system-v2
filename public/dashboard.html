@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#1a237e" />
+  <title>แดชบอร์ด — ระบบเช็คชื่อนักเรียน</title>
+  <link rel="icon" href="https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DLEchopSbfi&sz=w128" />
+  <link rel="stylesheet" href="css/app.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div id="alert-area"></div>
+
+  <!-- Filter / Header -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">📊 แดชบอร์ดภาพรวม</div>
+        <div class="card-subtitle" id="dash-date-label"></div>
+      </div>
+      <button id="btn-refresh" class="btn btn-secondary btn-sm">
+        <i class="fas fa-sync me-1"></i> รีเฟรช
+      </button>
+    </div>
+    <div class="flex" style="flex-wrap:wrap;gap:.6rem;align-items:center;padding:.5rem 0 0;border-top:1px dashed var(--border);margin-top:.5rem;">
+      <label for="dash-date" style="font-size:.85rem;color:var(--text-2);margin:0;"><i class="fas fa-calendar-day me-1"></i> วันที่:</label>
+      <input type="date" id="dash-date" class="form-control form-control-sm" style="max-width:170px;" />
+      <button class="btn btn-sm btn-secondary" id="btn-today"><i class="fas fa-undo me-1"></i> วันนี้</button>
+      <label style="font-size:.85rem;color:var(--text-2);margin:0 0 0 1rem;"><i class="fas fa-clock me-1"></i> รอบ:</label>
+      <select id="dash-round" class="form-control form-control-sm form-select" style="width:160px;">
+        <option value="1">รอบ 1 (เข้าเรียน)</option>
+        <option value="2">รอบ 2 (ออกท้ายคาบ)</option>
+      </select>
+      <span id="dash-backdate" style="display:none;background:#fff3cd;color:#856404;padding:.2rem .7rem;border-radius:999px;font-size:.8rem;font-weight:600;border:1px solid #ffeeba;">
+        <i class="fas fa-history me-1"></i> ดูย้อนหลัง
+      </span>
+    </div>
+
+    <!-- โหมด filter (ทั้งหมด / ปกติ / Upskill / ระยะสั้น) -->
+    <div class="flex" style="flex-wrap:wrap;gap:.4rem;align-items:center;padding:.5rem 0 0;border-top:1px dashed var(--border);margin-top:.5rem;">
+      <label style="font-size:.85rem;color:var(--text-2);margin:0;">
+        <i class="fas fa-filter me-1"></i> โหมด:
+      </label>
+      <button type="button" class="btn btn-sm btn-primary" data-mode="all">ทั้งหมด</button>
+      <button type="button" class="btn btn-sm btn-outline-primary" data-mode="normal">ปกติ</button>
+      <button type="button" class="btn btn-sm btn-outline-primary" data-mode="upskill">Upskill / Reskill / Newskill</button>
+      <button type="button" class="btn btn-sm btn-outline-primary" data-mode="short">ระยะสั้น</button>
+    </div>
+  </div>
+
+  <!-- Hero KPI -->
+  <div id="dash-hero" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin-bottom:1rem;">
+    <div class="empty-state" style="grid-column:1/-1;"><div class="spinner" style="margin:0 auto;"></div></div>
+  </div>
+
+  <!-- Stat cards -->
+  <div id="dash-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.75rem;margin-bottom:1rem;"></div>
+
+  <!-- Charts -->
+  <div class="card">
+    <div class="card-header"><div class="card-title">📊 กราฟภาพรวม</div></div>
+    <div style="display:grid;grid-template-columns:minmax(220px,1fr) minmax(300px,2fr);gap:1rem;padding:.5rem 0;">
+      <div>
+        <div style="font-weight:600;color:var(--primary);margin-bottom:.4rem;">🍩 สัดส่วนวันนี้</div>
+        <div style="position:relative;height:240px;">
+          <canvas id="donut-chart"></canvas>
+        </div>
+      </div>
+      <div>
+        <div style="font-weight:600;color:var(--primary);margin-bottom:.4rem;">📈 เทรนด์ 7 วันที่ผ่านมา (% เข้าเรียน)</div>
+        <div style="position:relative;height:240px;">
+          <canvas id="trend-chart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top teachers + Top low subjects -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem;margin-top:1rem;">
+    <div class="card">
+      <div class="card-header" style="flex-wrap:wrap;gap:.4rem;">
+        <div class="card-title">⏱ ครูที่เช็คชื่อ — เวลาเช็คล่าสุด</div>
+        <div style="display:flex;gap:.3rem;align-items:center;">
+          <span style="font-size:.78rem;color:var(--text-2);">รอบ:</span>
+          <button type="button" class="btn btn-xs btn-primary" data-tt-round="">ทั้งหมด</button>
+          <button type="button" class="btn btn-xs btn-outline-primary" data-tt-round="1">รอบ 1</button>
+          <button type="button" class="btn btn-xs btn-outline-primary" data-tt-round="2">รอบ 2</button>
+        </div>
+      </div>
+      <div id="top-teachers-box">
+        <div class="empty-state"><div class="spinner" style="margin:0 auto;"></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">🔻 5 วิชา % เข้าเรียนต่ำสุด</div></div>
+      <div id="low-rate-box">
+        <div class="empty-state"><div class="spinner" style="margin:0 auto;"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Subject Stats Table -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">🏫 สถิติแยกตามวิชา <span id="subj-count" class="badge bg-secondary"></span></div>
+        <div class="card-subtitle text-muted" id="subj-date-label" style="font-size:.85rem;"></div>
+      </div>
+      <input id="subj-search" class="form-control form-control-sm" placeholder="🔍 รหัส/ชื่อ/ครู" style="width:240px;" />
+    </div>
+    <div class="hint" style="margin-bottom:.5rem;">💡 คลิกแถวเพื่อดูรายชื่อนักเรียน + สถานะ</div>
+    <div class="table-wrapper" style="overflow-x:auto;">
+      <table class="table table-hover" style="font-size:.85rem;" id="subj-table">
+        <thead style="background:#f0f2f5;">
+          <tr>
+            <th>รหัส</th>
+            <th>ชื่อวิชา</th>
+            <th>ครูผู้สอน</th>
+            <th class="text-end">นร.</th>
+            <th class="text-end" style="color:var(--c-present);">มา</th>
+            <th class="text-end" style="color:var(--c-absent);">ขาด</th>
+            <th class="text-end" style="color:var(--c-late);">สาย</th>
+            <th class="text-end" style="color:var(--c-leave);">ลาป่วย</th>
+            <th class="text-end" style="color:var(--c-leave-s);">ลากิจ</th>
+            <th class="text-end">ยังไม่เช็ค</th>
+            <th class="text-end">% มา</th>
+            <th class="text-center" style="font-size:.75rem;">รอบ 1</th>
+            <th class="text-center" style="font-size:.75rem;">รอบ 2</th>
+            <th class="text-center" style="font-size:.75rem;">บันทึก<br>หลังสอน</th>
+          </tr>
+        </thead>
+        <tbody id="subj-tbody">
+          <tr><td colspan="14" style="text-align:center;padding:1.5rem;"><div class="spinner" style="margin:0 auto;"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Top Absentees -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">⚠️ Top 30 นักเรียนขาดเรียนสูงสุด <span class="text-muted" style="font-size:.85rem;font-weight:400;">(ทุกวันที่บันทึก)</span></div>
+    </div>
+    <div id="top-absentees-box">
+      <div class="empty-state"><div class="spinner" style="margin:0 auto;"></div></div>
+    </div>
+  </div>
+
+  <!-- Subject Detail Modal -->
+  <div class="modal-bg" id="sd-modal" style="display:none;">
+    <div class="modal-card" id="sd-card">
+      <button class="sd-close-btn" id="sd-close" title="ปิด (Esc)">
+        <i class="fas fa-times"></i>
+      </button>
+
+      <!-- Header — สีน้ำเงิน + box มาเรียนขวาบน -->
+      <div id="sd-header" style="background:linear-gradient(135deg,#1a237e 0%,#3949ab 100%);color:#fff;padding:1rem 1.2rem;border-radius:10px;margin-bottom:.75rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:.75rem;">
+        <div style="flex:1;min-width:300px;">
+          <div style="font-size:1.1rem;font-weight:700;" id="sd-title">รายละเอียดการเช็คชื่อ</div>
+          <div id="sd-info-chips" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.5rem;font-size:.82rem;"></div>
+        </div>
+        <div id="sd-attended-big" style="background:#fff;color:#15803d;border-radius:10px;padding:.6rem 1rem;text-align:center;min-width:140px;border:1px solid rgba(255,255,255,.3);">
+          <div style="font-size:.78rem;color:#1a237e;font-weight:600;">มาเรียน (มา + สาย)</div>
+          <div style="font-size:1.8rem;font-weight:700;line-height:1.1;margin-top:.2rem;" id="sd-attended-num">—</div>
+          <div style="font-size:.78rem;color:var(--text-2);" id="sd-attended-pct"></div>
+        </div>
+      </div>
+
+      <!-- Stat badges 7 อัน (คลิกได้ — ทำหน้าที่ filter) -->
+      <div id="sd-stat-badges" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.65rem;align-items:center;">
+        <!-- generated dynamically -->
+        <span id="sd-count" style="margin-left:auto;font-size:.85rem;color:var(--text-2);"></span>
+      </div>
+
+      <div id="sd-body"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth } from './js/auth.js';
+    import { initLayout } from './js/layout.js';
+    import {
+      getDashboardSummary, getDashboardSubjects, getTopAbsentees,
+      getTopTeachersToday, getTrend7Days, getSubjectDetailByDay,
+      getStudentsByStatusToday, getSubjectHeaderInfo
+    } from './js/api.js';
+    import { showAlert, todayISO, formatThaiDate, esc } from './js/utils.js';
+
+    const profile = await requireAuth();
+    if (!profile) throw new Error('not authed');
+    if (!['admin', 'executive'].includes(profile.role)) {
+      alert('แดชบอร์ดสำหรับ admin / ผู้บริหาร เท่านั้น');
+      window.location.href = 'attendance.html';
+      throw new Error('not admin/executive');
+    }
+    initLayout(profile, 'dashboard', { title: 'แดชบอร์ด', icon: 'fa-tachometer-alt' });
+
+    const elDate  = document.getElementById('dash-date');
+    const elRound = document.getElementById('dash-round');
+    elDate.value = todayISO();
+
+    document.getElementById('btn-refresh').onclick = loadAll;
+    document.getElementById('btn-today').onclick = () => { elDate.value = todayISO(); loadAll(); };
+    elDate.onchange = loadAll;
+    elRound.onchange = loadAll;
+    document.getElementById('subj-search').addEventListener('input', debounce(renderSubjectRows, 200));
+
+    // Mode filter
+    document.querySelectorAll('[data-mode]').forEach(btn => {
+      btn.onclick = () => {
+        currentMode = btn.dataset.mode;
+        document.querySelectorAll('[data-mode]').forEach(b => {
+          b.className = b.dataset.mode === currentMode ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-outline-primary';
+        });
+        applyMode();
+      };
+    });
+
+    function applyMode() {
+      if (lastSummary) {
+        const s = applyModeToSummary(lastSummary);
+        renderHero(s);
+        renderStats(s);
+        renderDonut(s);
+      }
+      renderSubjectRows();
+      if (currentSubjects.length > 0) renderLowRate(currentSubjects);
+    }
+
+    function applyModeToSummary(s) {
+      if (currentMode === 'all') return s;
+      const filtered = currentSubjects.filter(x => (x.course_type || 'normal') === currentMode);
+      const totals = filtered.reduce((acc, x) => {
+        acc.present += +x.present || 0;
+        acc.absent  += +x.absent  || 0;
+        acc.late    += +x.late    || 0;
+        acc.sick    += +x.sick    || 0;
+        acc.leave   += +x.leave_cnt || 0;
+        return acc;
+      }, { present: 0, absent: 0, late: 0, sick: 0, leave: 0 });
+      const total = totals.present + totals.absent + totals.late + totals.sick + totals.leave;
+      return {
+        ...s,
+        present: totals.present,
+        absent:  totals.absent,
+        late:    totals.late,
+        sick:    totals.sick,
+        leave:   totals.leave,
+        total:   total,
+        checked_subjects: filtered.filter(x => (x.present + x.absent + x.late + x.sick + x.leave_cnt) > 0).length,
+        scheduled_subjects: filtered.length
+      };
+    }
+
+    // Top Teachers — round filter
+    document.querySelectorAll('[data-tt-round]').forEach(btn => {
+      btn.onclick = async () => {
+        ttRound = btn.dataset.ttRound === '' ? null : parseInt(btn.dataset.ttRound, 10);
+        document.querySelectorAll('[data-tt-round]').forEach(b => {
+          const sel = (b.dataset.ttRound === '' ? null : parseInt(b.dataset.ttRound, 10));
+          b.className = sel === ttRound ? 'btn btn-xs btn-primary' : 'btn btn-xs btn-outline-primary';
+        });
+        try {
+          const data = await getTopTeachersToday(elDate.value, ttRound, 20);
+          renderTopTeachers(data);
+        } catch (e) {
+          showAlert('โหลด fail: ' + e.message, 'error', 0);
+        }
+      };
+    });
+
+    let currentSubjects = [];
+    let donutChart = null, trendChart = null;
+    let sdDetail = [], sdFilter = 'all';
+    let currentMode = 'all';     // mode filter
+    let ttRound = null;          // top teachers round filter (null = both)
+    let lastSummary = null;      // cache for re-rendering
+
+    async function loadAll() {
+      const d = elDate.value;
+      const r = parseInt(elRound.value, 10);
+      const roundLabel = r === 1 ? 'รอบ 1 (เข้าเรียน)' : 'รอบ 2 (ออกท้ายคาบ)';
+      document.getElementById('dash-date-label').textContent = formatThaiDate(d) + ' · ' + roundLabel;
+      document.getElementById('subj-date-label').textContent = formatThaiDate(d);
+      document.getElementById('dash-backdate').style.display = d < todayISO() ? '' : 'none';
+
+      try {
+        const [summary, subjects, top, topT, trend] = await Promise.all([
+          getDashboardSummary(d, r),
+          getDashboardSubjects(d, r),
+          getTopAbsentees({ limit: 30 }),
+          getTopTeachersToday(d, ttRound, 20),
+          getTrend7Days(d, r)
+        ]);
+        lastSummary = summary;
+        currentSubjects = subjects;
+        const s = applyModeToSummary(summary);
+        renderHero(s);
+        renderStats(s);
+        renderDonut(s);
+        renderTrend(trend);
+        renderTopTeachers(topT);
+        renderLowRate(subjects);
+        renderSubjectRows();
+        renderTopAbsentees(top);
+      } catch (e) {
+        showAlert('โหลด fail: ' + e.message, 'error', 0);
+      }
+    }
+
+    function renderHero(s) {
+      const total = s.total || 0;
+      const present = s.present || 0;
+      const absentTotal = (s.absent || 0) + (s.sick || 0) + (s.leave || 0);
+      const totalStudents = s.total_students || 0;
+      const pctP = total > 0 ? Math.round(present * 100 / total) : 0;
+      const pctA = total > 0 ? Math.round(absentTotal * 100 / total) : 0;
+
+      // เทียบเมื่อวาน
+      const y = s.yesterday || {};
+      const yTotal = y.total || 0;
+      const yPctP = yTotal > 0 ? Math.round(y.present * 100 / yTotal) : 0;
+      const yAbs  = (y.absent || 0) + (y.sick || 0) + (y.leave || 0);
+      const yPctA = yTotal > 0 ? Math.round(yAbs * 100 / yTotal) : 0;
+      const dP = pctP - yPctP;
+      const dA = pctA - yPctA;
+
+      const trend = (delta, goodIsUp) => {
+        if (yTotal === 0) return `<span style="color:#6b7280;">— ไม่มีข้อมูลเมื่อวาน</span>`;
+        if (delta === 0) return `<span style="color:#6b7280;">━ เท่าเดิมจากเมื่อวาน</span>`;
+        const up = delta > 0;
+        const good = goodIsUp ? up : !up;
+        const color = good ? '#15803d' : '#b91c1c';
+        const icon = up ? '▲' : '▼';
+        const sign = up ? '+' : '';
+        return `<span style="color:${color};font-weight:600;">${icon} ${sign}${delta}% จากเมื่อวาน</span>`;
+      };
+
+      document.getElementById('dash-hero').innerHTML = `
+        <div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.2rem;box-shadow:0 2px 6px rgba(0,0,0,.04);">
+          <div style="display:flex;align-items:center;gap:.6rem;color:#4338ca;font-weight:600;font-size:.95rem;">
+            <i class="fas fa-users"></i> นักเรียน
+          </div>
+          <div style="font-size:2rem;font-weight:800;color:#4338ca;line-height:1.1;margin-top:.3rem;">
+            ${totalStudents.toLocaleString()} <span style="font-size:.9rem;color:#6b7280;font-weight:500;">คน</span>
+          </div>
+          <div style="margin-top:.4rem;font-size:.82rem;color:#6b7280;">ทั้งหมดในระบบ (active)</div>
+        </div>
+
+        <div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.2rem;box-shadow:0 2px 6px rgba(0,0,0,.04);">
+          <div style="display:flex;align-items:center;gap:.6rem;color:#15803d;font-weight:600;font-size:.95rem;">
+            <i class="fas fa-check-circle"></i> มาเรียน
+          </div>
+          <div style="font-size:2rem;font-weight:800;color:#15803d;line-height:1.1;margin-top:.3rem;">
+            ${present.toLocaleString()} <span style="font-size:.95rem;color:#6b7280;font-weight:500;">(${pctP}%)</span>
+          </div>
+          <div style="margin-top:.4rem;font-size:.82rem;">${trend(dP, true)}</div>
+        </div>
+
+        <div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.2rem;box-shadow:0 2px 6px rgba(0,0,0,.04);">
+          <div style="display:flex;align-items:center;gap:.6rem;color:#b91c1c;font-weight:600;font-size:.95rem;">
+            <i class="fas fa-times-circle"></i> ขาด/ลา
+          </div>
+          <div style="font-size:2rem;font-weight:800;color:#b91c1c;line-height:1.1;margin-top:.3rem;">
+            ${absentTotal.toLocaleString()} <span style="font-size:.95rem;color:#6b7280;font-weight:500;">(${pctA}%)</span>
+          </div>
+          <div style="margin-top:.4rem;font-size:.82rem;">${trend(dA, false)}</div>
+        </div>
+      `;
+    }
+
+    function renderStats(s) {
+      // status คลิกได้ (5 อัน) + เช็คทั้งหมด (ไม่คลิก)
+      const items = [
+        ['มา',     'มา',     s.present || 0, '#15803d'],
+        ['ขาด',    'ขาด',    s.absent  || 0, '#b91c1c'],
+        ['สาย',    'สาย',    s.late    || 0, '#e65100'],
+        ['ลาป่วย', 'ลาป่วย', s.sick    || 0, '#2563eb'],
+        ['ลากิจ',  'ลากิจ',  s.leave   || 0, '#7c3aed'],
+        ['เช็คทั้งหมด', null, s.total || 0, '#1a237e']
+      ];
+      document.getElementById('dash-stats').innerHTML = items.map(([l, status, v, c]) => {
+        const clickable = !!status;
+        return `
+          <div class="card stat-card${clickable ? ' clickable' : ''}"
+               ${clickable ? `data-status="${status}"` : ''}
+               style="margin:0;text-align:center;padding:.85rem;${clickable ? 'cursor:pointer;transition:all .15s;' : ''}">
+            <div style="font-size:.78rem;color:var(--text-2);">${l}${clickable ? ' <i class="fas fa-search-plus" style="font-size:.7rem;opacity:.5;"></i>' : ''}</div>
+            <div style="font-size:1.6rem;font-weight:700;color:${c};">${v.toLocaleString()}</div>
+          </div>
+        `;
+      }).join('');
+      document.querySelectorAll('.stat-card.clickable').forEach(el => {
+        el.onclick = () => openStatusDetail(el.dataset.status);
+      });
+    }
+
+    async function openStatusDetail(status) {
+      const titleMap = { 'มา':'✅ นักเรียนที่มาเรียน','ขาด':'❌ นักเรียนที่ขาดเรียน','สาย':'⏰ นักเรียนที่มาสาย','ลาป่วย':'🤒 นักเรียนที่ลาป่วย','ลากิจ':'📋 นักเรียนที่ลากิจ' };
+      // Title + chip
+      document.getElementById('sd-title').innerHTML = titleMap[status] || status;
+      document.getElementById('sd-info-chips').innerHTML =
+        `<span style="background:rgba(255,255,255,.18);padding:.3rem .65rem;border-radius:6px;">
+          <i class="fas fa-calendar-day me-1"></i> ${formatThaiDate(elDate.value)} · รอบ ${elRound.value}
+        </span>`;
+      // ซ่อน box "มาเรียน" + stat badges (ไม่เกี่ยวกับ view นี้)
+      document.getElementById('sd-attended-big').style.display = 'none';
+      document.getElementById('sd-stat-badges').style.display = 'none';
+      document.getElementById('sd-body').innerHTML = '<div class="empty-state"><div class="spinner" style="margin:0 auto;"></div></div>';
+      document.getElementById('sd-modal').style.display = 'flex';
+      document.body.classList.add('modal-open');
+      try {
+        const rows = await getStudentsByStatusToday(elDate.value, status, parseInt(elRound.value, 10));
+        if (rows.length === 0) {
+          document.getElementById('sd-body').innerHTML = '<div class="alert alert-info">ไม่มีนักเรียน</div>';
+          return;
+        }
+        const stColor = { 'มา':'var(--c-present)','ขาด':'var(--c-absent)','สาย':'var(--c-late)','ลาป่วย':'var(--c-leave)','ลากิจ':'var(--c-leave-s)' }[status] || 'var(--text-2)';
+        document.getElementById('sd-body').innerHTML = `
+          <div style="overflow-x:auto;">
+            <table class="table table-striped table-hover" style="font-size:.82rem;">
+              <thead style="background:#f0f2f5;">
+                <tr>
+                  <th style="width:50px;">ลำดับ</th>
+                  <th>ชื่อ-สกุล</th>
+                  <th>สาขาวิชา</th>
+                  <th style="width:90px;">ระดับ</th>
+                  <th>วิชา</th>
+                  <th>ครูผู้สอน</th>
+                  <th>หมายเหตุ</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.map((r, i) => `
+                  <tr>
+                    <td>${i + 1}</td>
+                    <td>${esc(r.out_full_name)}</td>
+                    <td style="font-size:.78rem;">${esc(r.out_major || '-')}</td>
+                    <td style="font-size:.78rem;font-weight:600;color:var(--primary);">${esc(r.out_class_label || '-')}</td>
+                    <td><b style="color:${stColor};">${esc(r.out_subject_name || r.out_subject_id || '')}</b></td>
+                    <td style="font-size:.78rem;color:var(--text-2);">${esc(r.out_teacher_names || '-')}</td>
+                    <td style="font-size:.78rem;color:var(--text-2);">${esc(r.out_note || '')}${r.out_late_at ? ` <small>(${esc(r.out_late_at)})</small>` : ''}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } catch (e) {
+        document.getElementById('sd-body').innerHTML = `<div class="alert alert-error">โหลด fail: ${esc(e.message)}</div>`;
+      }
+    }
+
+    function renderDonut(s) {
+      if (donutChart) donutChart.destroy();
+      const ctx = document.getElementById('donut-chart').getContext('2d');
+      const data = [
+        s.present || 0,
+        s.absent || 0,
+        s.late || 0,
+        s.sick || 0,
+        s.leave || 0
+      ];
+      const sum = data.reduce((a, b) => a + b, 0);
+      if (sum === 0) {
+        ctx.font = '14px Sarabun';
+        ctx.fillStyle = '#9ca3af';
+        ctx.textAlign = 'center';
+        ctx.fillText('ไม่มีข้อมูล', ctx.canvas.width / 2, ctx.canvas.height / 2);
+        return;
+      }
+      donutChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['มา', 'ขาด', 'สาย', 'ลาป่วย', 'ลากิจ'],
+          datasets: [{
+            data,
+            backgroundColor: ['#2e7d32', '#c62828', '#e65100', '#1565c0', '#880e4f'],
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { font: { family: 'Sarabun', size: 12 } } },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const v = ctx.parsed;
+                  const pct = sum > 0 ? Math.round(v * 1000 / sum) / 10 : 0;
+                  return `${ctx.label}: ${v} (${pct}%)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderTrend(trend) {
+      if (trendChart) trendChart.destroy();
+      const ctx = document.getElementById('trend-chart').getContext('2d');
+      const labels = trend.map(t => {
+        const [y, m, d] = t.date.split('-');
+        return `${parseInt(d)}/${parseInt(m)}`;
+      });
+      const data = trend.map(t => t.pct_present);
+      trendChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: '% เข้าเรียน',
+            data,
+            borderColor: '#1a237e',
+            backgroundColor: 'rgba(26,35,126,0.1)',
+            tension: 0.3,
+            fill: true,
+            pointBackgroundColor: '#ffd600',
+            pointBorderColor: '#1a237e',
+            pointBorderWidth: 2,
+            pointRadius: 5
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                afterLabel: (ctx) => `เช็คทั้งหมด ${trend[ctx.dataIndex].total_check} ครั้ง`
+              }
+            }
+          },
+          scales: {
+            y: { min: 0, max: 100, ticks: { callback: v => v + '%', font: { family: 'Sarabun' } } },
+            x: { ticks: { font: { family: 'Sarabun' } } }
+          }
+        }
+      });
+    }
+
+    function renderTopTeachers(list) {
+      const box = document.getElementById('top-teachers-box');
+      if (list.length === 0) {
+        box.innerHTML = '<div class="alert alert-info"><i class="fas fa-info-circle me-1"></i> ยังไม่มีครูเช็คชื่อวันนี้</div>';
+        return;
+      }
+      const fmtT = (ts) => {
+        if (!ts) return '-';
+        const t = new Date(ts);
+        return `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+      };
+      box.innerHTML = `
+        <div style="overflow-x:auto;max-height:380px;overflow-y:auto;">
+          <table class="table table-hover" style="font-size:.82rem;">
+            <thead style="background:#f0f2f5;position:sticky;top:0;">
+              <tr>
+                <th>#</th><th>ครู</th><th>แผนก</th>
+                <th class="text-end">วิชา</th>
+                <th class="text-end">เริ่ม</th>
+                <th class="text-end" style="color:var(--c-late);">ล่าสุด</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${list.map((r, i) => `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td>${esc(r.full_name)}<br><code style="font-size:.7rem;">${esc(r.teacher_id)}</code></td>
+                  <td style="font-size:.76rem;color:var(--text-2);">${esc(r.department || '-')}</td>
+                  <td class="text-end"><span class="badge bg-success">${r.subject_count}</span></td>
+                  <td class="text-end" style="color:var(--text-2);">${fmtT(r.earliest_at)}</td>
+                  <td class="text-end"><b style="color:var(--c-late);">${fmtT(r.latest_at)}</b></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderLowRate(subjects) {
+      const box = document.getElementById('low-rate-box');
+      let pool = subjects;
+      if (currentMode !== 'all') pool = pool.filter(s => (s.course_type || 'normal') === currentMode);
+      const list = pool
+        .filter(s => s.pct_present != null && (s.present + s.absent + s.late + s.sick + s.leave_cnt) > 0)
+        .sort((a, b) => a.pct_present - b.pct_present)
+        .slice(0, 5);
+      if (list.length === 0) {
+        box.innerHTML = '<div class="alert alert-info"><i class="fas fa-info-circle me-1"></i> ไม่มีข้อมูล</div>';
+        return;
+      }
+      box.innerHTML = `
+        <div style="overflow-x:auto;">
+          <table class="table table-hover" style="font-size:.85rem;">
+            <thead style="background:#f0f2f5;">
+              <tr><th>รหัส</th><th>ชื่อวิชา</th><th class="text-end">% มา</th><th class="text-end">เช็คแล้ว</th></tr>
+            </thead>
+            <tbody>
+              ${list.map(s => {
+                const pct = s.pct_present;
+                const pctCls = pct < 60 ? 'text-danger' : pct < 80 ? 'text-warning' : 'text-success';
+                const total = +s.present + +s.absent + +s.late + +s.sick + +s.leave_cnt;
+                return `
+                  <tr>
+                    <td><code>${esc(s.subject_id)}</code></td>
+                    <td>${esc(s.subject_name)}</td>
+                    <td class="text-end ${pctCls}"><b>${pct}%</b></td>
+                    <td class="text-end">${total} / ${s.enrolled}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderSubjectRows() {
+      const q = (document.getElementById('subj-search').value || '').toLowerCase();
+      let list = currentSubjects;
+      // mode filter
+      if (currentMode !== 'all') list = list.filter(r => (r.course_type || 'normal') === currentMode);
+      if (q) list = list.filter(r =>
+        (r.subject_id || '').toLowerCase().includes(q) ||
+        (r.subject_name || '').toLowerCase().includes(q) ||
+        (r.teacher_names || '').toLowerCase().includes(q)
+      );
+      document.getElementById('subj-count').textContent = list.length + ' วิชา';
+      const tbody = document.getElementById('subj-tbody');
+      if (list.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="14" class="text-muted" style="text-align:center;padding:1rem;">ไม่มีวิชาเช็คชื่อในวันนี้</td></tr>`;
+        return;
+      }
+      const ok = '<i class="fas fa-check-circle" style="color:#15803d;font-size:1.1rem;"></i>';
+      const ng = '<i class="fas fa-times-circle" style="color:#dc2626;font-size:1.1rem;"></i>';
+      tbody.innerHTML = list.map(r => {
+        const pct = r.pct_present;
+        const pctCls = pct == null ? 'text-muted' : pct >= 80 ? 'text-success' : pct >= 60 ? 'text-warning' : 'text-danger';
+        const pctTxt = pct == null ? '—' : pct + '%';
+        const uncheckedBadge = r.unchecked > 0 ? `<span class="badge bg-warning text-dark">${r.unchecked}</span>` : `<span class="text-muted">0</span>`;
+        return `
+          <tr style="cursor:pointer;" data-sid="${esc(r.subject_id)}" data-name="${esc(r.subject_name)}">
+            <td><code>${esc(r.subject_id)}</code></td>
+            <td>${esc(r.subject_name)}</td>
+            <td style="font-size:.8rem;color:var(--text-2);">${esc(r.teacher_names || '-')}</td>
+            <td class="text-end">${r.enrolled}</td>
+            <td class="text-end" style="color:var(--c-present);font-weight:600;">${r.present}</td>
+            <td class="text-end" style="color:var(--c-absent);">${r.absent}</td>
+            <td class="text-end" style="color:var(--c-late);">${r.late}</td>
+            <td class="text-end" style="color:var(--c-leave);">${r.sick}</td>
+            <td class="text-end" style="color:var(--c-leave-s);">${r.leave_cnt}</td>
+            <td class="text-end">${uncheckedBadge}</td>
+            <td class="text-end ${pctCls}"><b>${pctTxt}</b></td>
+            <td class="text-center">${r.has_round_1 ? ok : ng}</td>
+            <td class="text-center">${r.has_round_2 ? ok : ng}</td>
+            <td class="text-center">${r.has_teaching_log ? ok : ng}</td>
+          </tr>
+        `;
+      }).join('');
+      tbody.querySelectorAll('tr[data-sid]').forEach(tr => {
+        tr.onclick = () => openSubjectDetail(tr.dataset.sid, tr.dataset.name);
+      });
+    }
+
+    function renderTopAbsentees(list) {
+      const box = document.getElementById('top-absentees-box');
+      if (list.length === 0) {
+        box.innerHTML = '<div class="alert alert-info"><i class="fas fa-info-circle me-1"></i> ไม่มีข้อมูลขาดเรียน</div>';
+        return;
+      }
+      box.innerHTML = `
+        <div class="hint" style="margin-bottom:.5rem;">📊 นับเป็น <b>จำนวนวัน</b> (ไม่ใช่จำนวนคาบ)</div>
+        <div class="table-wrapper" style="overflow-x:auto;">
+          <table class="table table-hover" style="font-size:.85rem;">
+            <thead style="background:#f0f2f5;">
+              <tr>
+                <th style="width:55px;">อันดับ</th>
+                <th>ชื่อ-สกุล</th>
+                <th style="width:110px;">ระดับ</th>
+                <th>สาขา</th>
+                <th class="text-end" style="color:var(--c-absent);">ขาด</th>
+                <th class="text-end" style="color:var(--c-late);">สาย</th>
+                <th class="text-end" style="color:var(--c-leave);">ลาป่วย</th>
+                <th class="text-end" style="color:var(--c-leave-s);">ลากิจ</th>
+                <th class="text-end">รวมไม่มา</th>
+                <th class="text-end">% มา</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${list.map((r, i) => {
+                const pct = r.pct_present;
+                const pctCls = pct >= 80 ? 'text-success' : pct >= 60 ? 'text-warning' : 'text-danger';
+                return `
+                  <tr>
+                    <td><b>#${i + 1}</b></td>
+                    <td>${esc(r.full_name)}</td>
+                    <td style="font-weight:600;color:var(--primary);">${esc(r.class_label || '-')}</td>
+                    <td style="font-size:.8rem;">${esc(r.major || '-')}</td>
+                    <td class="text-end" style="color:var(--c-absent);">${r.absent_cnt}</td>
+                    <td class="text-end" style="color:var(--c-late);">${r.late_cnt}</td>
+                    <td class="text-end" style="color:var(--c-leave);">${r.sick_cnt}</td>
+                    <td class="text-end" style="color:var(--c-leave-s);">${r.leave_cnt}</td>
+                    <td class="text-end"><b style="color:var(--c-absent);">${r.total_miss}</b> / ${r.total_check} วัน</td>
+                    <td class="text-end ${pctCls}"><b>${r.pct_present}%</b></td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    // ===== Subject Detail Modal =====
+    async function openSubjectDetail(sid, name) {
+      document.getElementById('sd-title').innerHTML = `<i class="fas fa-book me-1"></i> วิชา : ${esc(name)}`;
+      // แสดงทุก element กลับมา (เผื่อโดน hide จาก stat card click)
+      document.getElementById('sd-attended-big').style.display = '';
+      document.getElementById('sd-stat-badges').style.display = '';
+      // ตอนเปิดมา — ใส่ chip date ก่อน + เปิด modal
+      document.getElementById('sd-info-chips').innerHTML =
+        `<span style="background:rgba(255,255,255,.18);padding:.25rem .6rem;border-radius:6px;">
+          <i class="fas fa-calendar-day me-1"></i> ${formatThaiDate(elDate.value)} · รอบ ${elRound.value}
+        </span>`;
+      document.getElementById('sd-body').innerHTML = '<div class="empty-state"><div class="spinner" style="margin:0 auto;"></div></div>';
+      document.querySelectorAll('[data-sd-flt]').forEach(b => b.style.display = '');
+      document.getElementById('sd-modal').style.display = 'flex';
+      document.body.classList.add('modal-open');
+
+      try {
+        // โหลด 3 อันขนาน: detail + header info + subject row
+        const [detail, header] = await Promise.all([
+          getSubjectDetailByDay(sid, elDate.value, parseInt(elRound.value, 10)),
+          getSubjectHeaderInfo(sid)
+        ]);
+        sdDetail = detail;
+        sdFilter = 'all';
+
+        // Render header chips ใหม่
+        const chips = [];
+        chips.push(`<i class="fas fa-calendar-day me-1"></i> ${formatThaiDate(elDate.value)} · รอบ ${elRound.value}`);
+        if (header.teacher_names && header.teacher_names !== '-') {
+          chips.push(`<i class="fas fa-chalkboard-teacher me-1"></i> ครูผู้สอน: ${esc(header.teacher_names)}`);
+        }
+        if (header.teacher_phones && header.teacher_phones !== '-' && header.teacher_phones !== '') {
+          chips.push(`<i class="fas fa-phone me-1"></i> โทร: ${esc(header.teacher_phones)}`);
+        }
+        if (header.majors && header.majors !== '-') {
+          chips.push(`<i class="fas fa-sitemap me-1"></i> สาขา: ${esc(header.majors)}`);
+        }
+        if (header.levels && header.levels !== '-') {
+          chips.push(`<i class="fas fa-graduation-cap me-1"></i> ระดับ: ${esc(header.levels)}`);
+        }
+        if (header.years && header.years !== '-') {
+          chips.push(`<i class="fas fa-layer-group me-1"></i> ชั้นปี: ${esc(header.years)}`);
+        }
+        if (header.rooms && header.rooms !== '-') {
+          chips.push(`<i class="fas fa-door-open me-1"></i> ห้อง: ${esc(header.rooms)}`);
+        }
+        document.getElementById('sd-info-chips').innerHTML = chips.map(c =>
+          `<span style="background:rgba(255,255,255,.18);padding:.3rem .65rem;border-radius:6px;white-space:nowrap;">${c}</span>`
+        ).join('');
+
+        renderSdStatBox();
+        renderSubjectDetail();
+      } catch (e) {
+        document.getElementById('sd-body').innerHTML = `<div class="alert alert-error">โหลด fail: ${esc(e.message)}</div>`;
+      }
+    }
+
+    function renderSdStatBox() {
+      const counts = {
+        all:  sdDetail.length,
+        มา:    sdDetail.filter(r => r.status === 'มา').length,
+        ขาด:   sdDetail.filter(r => r.status === 'ขาด').length,
+        สาย:   sdDetail.filter(r => r.status === 'สาย').length,
+        ลาป่วย: sdDetail.filter(r => r.status === 'ลาป่วย').length,
+        ลากิจ:  sdDetail.filter(r => r.status === 'ลากิจ').length,
+        none:  sdDetail.filter(r => !r.status).length
+      };
+      const attended = counts.มา + counts.สาย;
+      const pct = counts.all > 0 ? Math.round(attended * 100 / counts.all) : 0;
+      document.getElementById('sd-attended-num').textContent = `${attended} / ${counts.all} คน`;
+      document.getElementById('sd-attended-pct').textContent = `(${pct}%)`;
+
+      const badges = [
+        ['ทั้งหมด',   'all',    counts.all,    '#1a237e'],
+        ['มา',        'มา',     counts.มา,     '#15803d'],
+        ['ขาด',       'ขาด',    counts.ขาด,    '#b91c1c'],
+        ['สาย',       'สาย',    counts.สาย,    '#e65100'],
+        ['ลาป่วย',    'ลาป่วย', counts.ลาป่วย, '#2563eb'],
+        ['ลากิจ',     'ลากิจ',  counts.ลากิจ,  '#7c3aed'],
+        ['ยังไม่เช็ค', 'none',   counts.none,   '#6b7280']
+      ];
+      const host = document.getElementById('sd-stat-badges');
+      // ลบ badges เก่า (เก็บ #sd-count)
+      Array.from(host.querySelectorAll('.sd-stat-badge')).forEach(el => el.remove());
+      const html = badges.map(([l, key, v, c]) => {
+        const active = sdFilter === key;
+        const bg = active ? c : c + '15';
+        const fg = active ? '#fff' : c;
+        const border = active ? c : c + '40';
+        return `
+          <span class="sd-stat-badge" data-sd-flt="${key}"
+                style="background:${bg};color:${fg};border:1px solid ${border};padding:.3rem .7rem;border-radius:8px;font-size:.85rem;font-weight:600;cursor:pointer;transition:all .15s;user-select:none;">
+            ${l}: ${v}
+          </span>
+        `;
+      }).join('');
+      host.insertAdjacentHTML('afterbegin', html);
+      host.querySelectorAll('.sd-stat-badge').forEach(el => {
+        el.onclick = () => {
+          sdFilter = el.dataset.sdFlt;
+          renderSdStatBox();
+          renderSubjectDetail();
+        };
+      });
+    }
+
+    function renderSubjectDetail() {
+      let list = sdDetail;
+      if (sdFilter === 'none') list = list.filter(r => !r.status);
+      else if (sdFilter !== 'all') list = list.filter(r => r.status === sdFilter);
+      document.getElementById('sd-count').textContent = `${list.length} / ${sdDetail.length} คน`;
+      if (list.length === 0) {
+        document.getElementById('sd-body').innerHTML = '<div class="alert alert-info">ไม่มีข้อมูล</div>';
+        return;
+      }
+      const stColor = (st) => ({ 'มา':'var(--c-present)','ขาด':'var(--c-absent)','สาย':'var(--c-late)','ลาป่วย':'var(--c-leave)','ลากิจ':'var(--c-leave-s)' }[st] || 'var(--text-3)');
+      document.getElementById('sd-body').innerHTML = `
+        <div style="overflow-x:auto;">
+          <table class="table table-striped table-hover" style="font-size:.85rem;">
+            <thead style="background:#f0f2f5;">
+              <tr>
+                <th style="width:60px;">ลำดับ</th>
+                <th>ชื่อ-สกุล</th>
+                <th style="width:110px;">สถานะ</th>
+                <th>เวลา/หมายเหตุ</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${list.map((r, i) => `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td>${esc(r.full_name)}</td>
+                  <td><b style="color:${stColor(r.status)};">${esc(r.status || '— ยังไม่เช็ค')}</b></td>
+                  <td style="font-size:.78rem;color:var(--text-2);">${r.late_at ? '⏰ ' + esc(r.late_at) : ''} ${esc(r.note || '')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    document.getElementById('sd-close').onclick = () => {
+      document.getElementById('sd-modal').style.display = 'none';
+      document.body.classList.remove('modal-open');
+    };
+    document.querySelectorAll('[data-sd-flt]').forEach(btn => {
+      btn.onclick = () => {
+        sdFilter = btn.dataset.sdFlt;
+        document.querySelectorAll('[data-sd-flt]').forEach(b => {
+          const isActive = b.dataset.sdFlt === sdFilter;
+          const variant = {'มา':'success','ขาด':'danger','สาย':'warning','ลาป่วย':'info','ลากิจ':'secondary','none':'dark'}[b.dataset.sdFlt] || 'primary';
+          b.className = `btn btn-sm ${isActive ? 'btn-' + variant : 'btn-outline-' + variant}`;
+        });
+        renderSubjectDetail();
+      };
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.getElementById('sd-modal').style.display === 'flex') {
+        document.getElementById('sd-close').click();
+      }
+    });
+
+    function debounce(fn, ms = 200) {
+      let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+    }
+
+    await loadAll();
+  </script>
+
+  <style>
+    .text-end { text-align: right; }
+    .text-center { text-align: center; }
+    .text-muted { color: var(--text-2); }
+    .stat-card.clickable:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(26,35,126,.15);
+      border-color: var(--primary);
+    }
+    .btn-xs {
+      padding: .15rem .55rem;
+      font-size: .72rem;
+      border-radius: 4px;
+      line-height: 1.3;
+    }
+    .modal-bg {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.55);
+      z-index: 9999;
+      padding: 1rem;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    .modal-bg[style*="flex"] { display: flex !important; }
+    .modal-card {
+      background: #fff; border-radius: 12px;
+      width: 100%; max-width: 1100px;
+      max-height: calc(100vh - 1rem);
+      overflow-y: auto;
+      padding: 18px;
+      box-shadow: 0 10px 40px rgba(0,0,0,.35);
+      position: relative;
+      margin: 0 auto;
+    }
+    /* compact table ใน modal — แสดงนักเรียนได้เยอะที่สุด */
+    #sd-body .table {
+      font-size: .82rem;
+      margin: 0;
+    }
+    #sd-body .table td, #sd-body .table th {
+      padding: .2rem .55rem;
+      vertical-align: middle;
+      line-height: 1.3;
+    }
+    #sd-body .table thead th {
+      font-size: .78rem;
+      padding: .3rem .55rem;
+      font-weight: 600;
+    }
+    #sd-body .table tbody tr { height: 28px; }
+    /* ลด gap ในส่วน header card */
+    #sd-card { padding: 14px; }
+    #sd-header { padding: .7rem 1rem; margin-bottom: .55rem; }
+    #sd-stat-badges { margin-bottom: .5rem; }
+    .modal-title { color: var(--primary); font-weight: 700; font-size: 1.2rem; margin-bottom: 1rem; }
+    .modal-close {
+      position: absolute; top: 12px; right: 16px;
+      background: none; border: none; font-size: 26px;
+      cursor: pointer; color: var(--text-2);
+    }
+    /* ปุ่มปิดของ subject detail modal — ชัดเจนมาก */
+    .sd-close-btn {
+      position: absolute;
+      top: 14px; right: 16px;
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.95);
+      border: 2px solid rgba(255,255,255,1);
+      color: #b91c1c;
+      font-size: 18px;
+      cursor: pointer;
+      z-index: 10;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,.3);
+      transition: all .2s;
+    }
+    .sd-close-btn:hover {
+      background: #b91c1c;
+      color: #fff;
+      transform: rotate(90deg) scale(1.1);
+    }
+    body.modal-open { overflow: hidden; }
+  </style>
+</body>
+</html>
