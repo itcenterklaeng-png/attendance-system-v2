@@ -3,6 +3,7 @@
  * ใช้กับทุกหน้าที่ login แล้ว
  */
 import { signOut } from './auth.js';
+import { supabase } from './supabase-client.js';
 
 const LOGO_URL = 'https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DLEchopSbfi&sz=w128';
 
@@ -26,6 +27,7 @@ export function initLayout(profile, activeId, opts = {}) {
   injectShell(profile, activeId, opts);
   startClock();
   wireGlobalHandlers();
+  startPresence(profile);
 }
 
 function injectFonts() {
@@ -63,6 +65,47 @@ function injectFonts() {
 
       /* hover state ของ nav-btn */
       .nav-btn:hover { background: rgba(255,255,255,.07) !important; color:#fff !important; }
+
+      /* presence pulse */
+      @keyframes presence-pulse {
+        0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, .6); }
+        70% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+      }
+      .presence-box:hover { background: #bbf7d0 !important; }
+
+      /* presence popover */
+      #presence-popover {
+        position: fixed;
+        top: 56px; right: 16px;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0,0,0,.12);
+        min-width: 260px; max-width: 320px; max-height: 400px;
+        overflow-y: auto;
+        z-index: 100;
+        padding: .75rem;
+        display: none;
+        font-family: 'Sarabun', sans-serif;
+      }
+      #presence-popover.show { display: block; }
+      .presence-user-row {
+        display: flex; align-items: center; gap: .55rem;
+        padding: .5rem .35rem;
+        border-radius: 6px;
+        font-size: 13px;
+      }
+      .presence-user-row:hover { background: #f3f4f6; }
+      .presence-user-avatar {
+        width: 30px; height: 30px; border-radius: 50%;
+        background: linear-gradient(135deg, #1a237e, #3949ab);
+        color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 700; font-size: 12px;
+        flex-shrink: 0;
+      }
+      .presence-user-row.is-me .presence-user-avatar { background: linear-gradient(135deg, #ca8a04, #eab308); }
 
       @media (max-width: 768px) {
         #sidebar { transform: translateX(-100%); box-shadow: 5px 0 20px rgba(0,0,0,.3); }
@@ -172,6 +215,12 @@ function injectShell(profile, activeId, opts) {
           </h1>
         </div>
         <div class="d-flex align-items-center gap-2" style="display:flex;align-items:center;gap:8px;">
+          <button class="presence-box" id="presence-btn" title="คนที่ออนไลน์อยู่ — คลิกเพื่อดูรายชื่อ"
+            style="background:#dcfce7;padding:6px 12px;border-radius:8px;font-size:12.5px;line-height:1.2;border:1px solid #bbf7d0;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;color:#166534;font-weight:700;">
+            <span class="presence-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 0 rgba(34,197,94,.5);animation:presence-pulse 2s infinite;"></span>
+            <span>ออนไลน์</span>
+            <span class="presence-count" id="presence-count" style="background:#22c55e;color:#fff;padding:1px 8px;border-radius:999px;font-size:11.5px;min-width:18px;text-align:center;">1</span>
+          </button>
           <div class="clock-box" style="background:#f0f2f5;padding:6px 12px;border-radius:8px;text-align:right;font-size:11px;line-height:1.2;">
             <div style="display:flex;align-items:baseline;gap:2px;justify-content:flex-end;">
               <span class="clock-time" id="clock-hm" style="font-weight:700;font-size:15px;color:#1a237e;">00:00</span>
@@ -238,4 +287,123 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   }[c]));
+}
+
+// ============================================
+// Realtime Presence — แสดงจำนวนคนออนไลน์ใน topbar
+// ใช้ Supabase Realtime Presence (built-in)
+// ============================================
+let presenceChannel = null;
+const PRESENCE_USERS = new Map(); // user_id → { name, role, joined_at }
+
+function startPresence(profile) {
+  if (!profile || !profile.id) return;
+  const myUserId = profile.id;
+  const myName = profile.teacher_full_name || profile.full_name || profile.email;
+  const myRole = profile.role === 'admin' ? 'ผู้ดูแลระบบ'
+              : profile.role === 'executive' ? 'ผู้บริหาร'
+              : 'ครู';
+
+  // สร้าง popover element
+  let popover = document.getElementById('presence-popover');
+  if (!popover) {
+    popover = document.createElement('div');
+    popover.id = 'presence-popover';
+    document.body.appendChild(popover);
+  }
+
+  // toggle popover
+  const btn = document.getElementById('presence-btn');
+  if (btn) {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      popover.classList.toggle('show');
+      if (popover.classList.contains('show')) renderPopover(myUserId);
+    };
+  }
+  // ปิด popover เมื่อคลิกที่อื่น
+  document.addEventListener('click', (e) => {
+    if (!popover.contains(e.target) && e.target.id !== 'presence-btn' && !e.target.closest('#presence-btn')) {
+      popover.classList.remove('show');
+    }
+  });
+
+  // ปิด channel เก่า (เผื่อ initLayout ถูกเรียกซ้ำ)
+  if (presenceChannel) {
+    try { supabase.removeChannel(presenceChannel); } catch {}
+    presenceChannel = null;
+  }
+
+  presenceChannel = supabase.channel('online-users', {
+    config: { presence: { key: myUserId } }
+  });
+
+  presenceChannel
+    .on('presence', { event: 'sync' }, () => {
+      const state = presenceChannel.presenceState();
+      PRESENCE_USERS.clear();
+      Object.keys(state).forEach(uid => {
+        const meta = state[uid][0]; // เอา instance ล่าสุด (อาจมีหลาย tab)
+        if (meta) PRESENCE_USERS.set(uid, meta);
+      });
+      updatePresenceUI(myUserId);
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await presenceChannel.track({
+          user_id: myUserId,
+          name: myName,
+          role: myRole,
+          email: profile.email,
+          joined_at: new Date().toISOString()
+        });
+      }
+    });
+
+  // ออกจาก channel เมื่อปิด tab
+  window.addEventListener('beforeunload', () => {
+    if (presenceChannel) {
+      try { presenceChannel.untrack(); supabase.removeChannel(presenceChannel); } catch {}
+    }
+  });
+}
+
+function updatePresenceUI(myUserId) {
+  const count = PRESENCE_USERS.size;
+  const el = document.getElementById('presence-count');
+  if (el) el.textContent = String(count);
+  // re-render popover ถ้าเปิดอยู่
+  const pop = document.getElementById('presence-popover');
+  if (pop && pop.classList.contains('show')) renderPopover(myUserId);
+}
+
+function renderPopover(myUserId) {
+  const pop = document.getElementById('presence-popover');
+  if (!pop) return;
+  const list = Array.from(PRESENCE_USERS.entries()).map(([uid, meta]) => {
+    const isMe = uid === myUserId;
+    const name = meta.name || meta.email || 'ผู้ใช้';
+    const role = meta.role || '';
+    const initial = (name || '?').trim().charAt(0).toUpperCase();
+    return `
+      <div class="presence-user-row ${isMe ? 'is-me' : ''}" title="${escapeHtml(meta.email || '')}">
+        <div class="presence-user-avatar">${escapeHtml(initial)}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;color:#1a237e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            ${escapeHtml(name)}${isMe ? ' <span style="color:#ca8a04;font-size:11px;">(คุณ)</span>' : ''}
+          </div>
+          <div style="font-size:11px;color:#64748b;">${escapeHtml(role)}</div>
+        </div>
+        <span style="width:8px;height:8px;border-radius:50%;background:#22c55e;"></span>
+      </div>
+    `;
+  }).join('');
+
+  pop.innerHTML = `
+    <div style="padding:.4rem .5rem;font-weight:700;color:#1a237e;border-bottom:1px solid #e5e7eb;margin-bottom:.4rem;display:flex;align-items:center;gap:.4rem;">
+      <i class="fas fa-users" style="color:#22c55e;"></i>
+      <span style="flex:1;">ออนไลน์ ${PRESENCE_USERS.size} คน</span>
+    </div>
+    ${list || '<div style="text-align:center;color:#94a3b8;padding:1rem;">ไม่มีคนออนไลน์</div>'}
+  `;
 }

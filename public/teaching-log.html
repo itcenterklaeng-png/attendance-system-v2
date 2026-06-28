@@ -190,9 +190,25 @@
       elSubject.innerHTML = '<option value="">— ทุกวิชา —</option>' +
         subjects.map(s => `<option value="${esc(s.subject_id)}">${esc(s.subject_id)} — ${esc(s.subject_name)}</option>`).join('');
       const params = new URLSearchParams(location.search);
-      const wanted = params.get('subject');
-      if (wanted) elSubject.value = wanted;
+      const wantedSubject = params.get('subject');
+      const wantedDate    = params.get('date');
+      if (wantedSubject) elSubject.value = wantedSubject;
       await loadLogs();
+
+      // ⭐ ถ้ามาจาก URL พร้อม date → auto-open modal สำหรับวันนั้นๆ
+      if (wantedSubject && wantedDate) {
+        // หา log เดิมของ (subject + date)
+        const existing = currentLogs.find(l =>
+          String(l.subject_id) === wantedSubject && String(l.date).slice(0, 10) === wantedDate
+        );
+        if (existing) {
+          // มีบันทึกเดิม → เปิด modal แก้ไข
+          openModal(existing);
+        } else {
+          // ยังไม่มี → เปิด modal บันทึกใหม่ พร้อม pre-fill subject + date
+          openModal({ subject_id: wantedSubject, date: wantedDate });
+        }
+      }
     } catch (e) { showAlert('โหลดวิชา fail: ' + e.message, 'error', 0); }
 
     document.getElementById('btn-load').onclick = loadLogs;
