@@ -37,19 +37,22 @@
     .btn-close { background: rgba(255,255,255,.18); color: #fff; }
     .btn-close:hover { background: rgba(255,255,255,.28); }
 
-    /* A4 print sheet */
-    #sheet {
+    /* A4 print sheets */
+    #wrap { padding: 1cm 0; }
+    .sheet {
       width: 21cm; min-height: 29.7cm;
-      margin: 1cm auto;
+      margin: 0 auto 1cm;
       background: #fff;
       padding: .5cm 1.2cm 1cm;
       box-shadow: 0 8px 25px rgba(0,0,0,.12);
       font-size: 12pt;
       line-height: 1.4;
+      page-break-after: always;
     }
-    #sheet.loading {
+    .sheet:last-child { page-break-after: auto; }
+    #wrap.loading {
       display: flex; align-items: center; justify-content: center;
-      color: #94a3b8;
+      color: #94a3b8; min-height: 200px; font-size: 1rem;
     }
 
     /* Header */
@@ -60,13 +63,25 @@
       align-items: center;
       margin-bottom: 6px;
     }
-    .doc-header .logo, .doc-header .photo {
+    .doc-header .logo {
       width: 100px; height: 100px;
       object-fit: contain;
-      background: #f8fafc;
       border-radius: 6px;
     }
-    .doc-header .photo { object-fit: cover; }
+    .doc-header .photo-cell {
+      display: flex; align-items: center; justify-content: center;
+      width: 100px; height: 100px;
+    }
+    .teacher-avatar {
+      width: 96px; height: 96px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #7B1F2B, #a02b3a);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 38pt; font-weight: 700;
+      font-family: 'Sarabun', sans-serif;
+      box-shadow: 0 4px 12px rgba(123, 31, 43, .25);
+    }
     .doc-header .title { text-align: center; }
     .doc-header .title-1 { font-size: 22pt; font-weight: 700; color: var(--maroon); line-height: 1.1; }
     .doc-header .title-2 { font-size: 16pt; font-weight: 700; color: var(--maroon); line-height: 1.1; }
@@ -113,7 +128,8 @@
     @media print {
       body { background: #fff; }
       .toolbar { display: none; }
-      #sheet {
+      #wrap { padding: 0; }
+      .sheet {
         margin: 0; box-shadow: none; padding: 0 1.2cm 1cm;
         width: 100%; min-height: 100vh;
       }
@@ -123,18 +139,18 @@
 </head>
 <body>
   <div class="toolbar">
-    <h1>📄 บันทึกหลังการสอน — Print Preview</h1>
-    <button class="btn-pdf" id="btn-do-pdf"><i>📕</i> ดาวน์โหลด PDF</button>
-    <button class="btn-word" id="btn-do-word"><i>📘</i> ดาวน์โหลด Word</button>
+    <h1 id="toolbar-title">📄 บันทึกหลังการสอน — Print Preview</h1>
+    <button class="btn-pdf" id="btn-do-pdf">📕 ดาวน์โหลด PDF</button>
+    <button class="btn-word" id="btn-do-word">📘 ดาวน์โหลด Word</button>
     <button class="btn-close" onclick="window.close()">ปิด</button>
   </div>
 
-  <div id="sheet" class="loading">⏳ กำลังโหลดข้อมูล...</div>
+  <div id="wrap" class="loading">⏳ กำลังโหลดข้อมูล...</div>
 
   <script type="module">
     import { requireAuth } from './js/auth.js';
     import { supabase } from './js/supabase-client.js';
-    import { listTeachingLogs, getAttendanceSummary } from './js/api.js';
+    import { listTeachingLogs } from './js/api.js';
 
     const profile = await requireAuth({ requireChangePassword: false });
     if (!profile) throw new Error('not authed');
@@ -142,11 +158,16 @@
     const params = new URLSearchParams(location.search);
     const subjectId = params.get('subject');
     const date = params.get('date');
-    const action = params.get('action'); // 'pdf' | 'word' | null
+    const mode = params.get('mode') || 'single';   // 'single' | 'all'
+    const action = params.get('action');           // 'pdf' | 'word' | null
 
-    if (!subjectId || !date) {
-      document.getElementById('sheet').innerHTML = '⚠ ขาด subject หรือ date ใน URL';
+    if (!subjectId) {
+      document.getElementById('wrap').innerHTML = '⚠ ขาด subject ใน URL';
       throw new Error('missing params');
+    }
+    if (mode === 'single' && !date) {
+      document.getElementById('wrap').innerHTML = '⚠ ขาด date ใน URL';
+      throw new Error('missing date');
     }
 
     function escapeHtml(s) {
@@ -154,78 +175,118 @@
       return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
-    // ---- โหลดข้อมูล ----
-    async function loadData() {
-      // 1. teaching log
-      const logs = await listTeachingLogs({ subjectId, dateFrom: date, dateTo: date });
-      const log = logs && logs[0];
+    const M_FULL = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+    function thaiDateParts(ymd) {
+      const dd = parseInt(ymd.slice(8,10),10);
+      const mm = parseInt(ymd.slice(5,7),10);
+      const yy = parseInt(ymd.slice(0,4),10) + 543;
+      return { dd, month: M_FULL[mm-1] || '', yy };
+    }
+    function termYear(ymd) {
+      const d = new Date(ymd);
+      const month = d.getMonth() + 1;
+      const term = month >= 5 && month <= 10 ? 1 : 2;
+      const academicYear = (term === 1)
+        ? (d.getFullYear() + 543)
+        : (month >= 11 ? d.getFullYear() + 543 : d.getFullYear() + 542);
+      return { term, academicYear };
+    }
 
-      // 2. subject + classes (จาก enrollments)
+    // ---- โหลดข้อมูลหลัก ----
+    async function loadCommonData() {
+      // subject info
       const { data: subj } = await supabase
         .from('subjects')
         .select('subject_id, subject_name, major')
         .eq('subject_id', subjectId).maybeSingle();
 
-      // 3. teacher (ผู้ใช้ปัจจุบันที่ login = profile)
-      const teacherName = profile.teacher_full_name || profile.full_name || profile.email;
-      const department = profile.department || '';
+      // teacher info — ใช้ของผู้ใช้ปัจจุบัน
+      let teacherName = profile.teacher_full_name || profile.full_name || profile.email;
+      let teacherDept = profile.department || '';
+      // ถ้าครูใน subject_teachers เป็นคนอื่น (เช่น admin ดู logs ของครู) → ใช้ของครูคนนั้น
+      if (profile.role === 'admin') {
+        const { data: st } = await supabase
+          .from('subject_teachers')
+          .select('teacher_id, teachers(full_name, department)')
+          .eq('subject_id', subjectId).limit(1).maybeSingle();
+        if (st && st.teachers) {
+          teacherName = st.teachers.full_name || teacherName;
+          teacherDept = st.teachers.department || teacherDept;
+        }
+      }
 
-      // 4. classes ของวิชา (จาก enrollments → classes)
+      // classes (จาก enrollments)
       const { data: enrolls } = await supabase
         .from('enrollments')
-        .select('class_id, classes(class_id, major, level, year, room)')
+        .select('class_id, student_id, classes(class_id, major, level, year, room)')
         .eq('subject_id', subjectId);
       const uniqClasses = {};
-      (enrolls || []).forEach(e => { if (e.classes) uniqClasses[e.class_id] = e.classes; });
+      const enrolledStudentIds = new Set();
+      (enrolls || []).forEach(e => {
+        if (e.classes) uniqClasses[e.class_id] = e.classes;
+        if (e.student_id) enrolledStudentIds.add(e.student_id);
+      });
       const classList = Object.values(uniqClasses);
       const majors = [...new Set(classList.map(c => c.major).filter(Boolean))].join(', ');
       const levels = [...new Set(classList.map(c => c.level).filter(Boolean))].join(', ');
       const years  = [...new Set(classList.map(c => c.year).filter(Boolean))].join(', ');
       const rooms  = [...new Set(classList.map(c => c.room).filter(Boolean))].join(', ');
 
-      // 5. attendance summary
-      let attSummary = { present: 0, absent: 0, late: 0, sick: 0, personal: 0, total: 0 };
+      return { subj, teacherName, teacherDept, majors, levels, years, rooms, totalEnrolled: enrolledStudentIds.size };
+    }
+
+    // ---- โหลด attendance ของวันที่กำหนด ----
+    async function loadAttendanceCount(forDate, totalEnrolled) {
+      const summary = { 'มา': 0, 'ขาด': 0, 'สาย': 0, 'ลาป่วย': 0, 'ลากิจ': 0 };
       try {
-        const sm = await getAttendanceSummary({ subjectId, dateFrom: date, dateTo: date });
-        if (sm && sm.length > 0) {
-          attSummary = {
-            present:  sm.reduce((s,r) => s + (r.present_count  || 0), 0),
-            absent:   sm.reduce((s,r) => s + (r.absent_count   || 0), 0),
-            late:     sm.reduce((s,r) => s + (r.late_count     || 0), 0),
-            sick:     sm.reduce((s,r) => s + (r.sick_count     || 0), 0),
-            personal: sm.reduce((s,r) => s + (r.personal_count || 0), 0),
-            total:    sm.reduce((s,r) => s + (r.total_records  || 0), 0)
-          };
-        }
-      } catch (e) { /* ไม่มีก็แสดง 0 */ }
-
-      // 6. ภาคเรียน + ปีการศึกษา (จากวันที่)
-      const d = new Date(date);
-      const month = d.getMonth() + 1;
-      const term = month >= 5 && month <= 10 ? 1 : 2;
-      const academicYear = (term === 1)
-        ? (d.getFullYear() + 543)
-        : (month >= 11 ? d.getFullYear() + 543 : d.getFullYear() + 542);
-
-      return { log, subj, teacherName, department, majors, levels, years, rooms, attSummary, term, academicYear };
+        const { data: att } = await supabase
+          .from('attendance')
+          .select('student_id, status, period')
+          .eq('subject_id', subjectId)
+          .eq('date', forDate)
+          .neq('period', 99);
+        // ป้องกันซ้ำกรณีมีหลาย period — เก็บ status ของ student (period ต่ำสุด)
+        const byStu = {};
+        (att || []).forEach(r => {
+          if (!byStu[r.student_id] || r.period < byStu[r.student_id].period) {
+            byStu[r.student_id] = r;
+          }
+        });
+        Object.values(byStu).forEach(r => { if (summary[r.status] != null) summary[r.status]++; });
+      } catch (e) {}
+      return {
+        present: summary['มา'],
+        absent: summary['ขาด'],
+        late: summary['สาย'],
+        sick: summary['ลาป่วย'],
+        personal: summary['ลากิจ'],
+        total: totalEnrolled
+      };
     }
 
-    function thaiDate(ymd) {
-      const M = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
-      const dd = parseInt(ymd.slice(8,10),10);
-      const mm = parseInt(ymd.slice(5,7),10);
-      const yy = parseInt(ymd.slice(0,4),10) + 543;
-      return { dd, month: M[mm-1] || '', yy };
+    // ---- โหลด logs ----
+    async function loadLogs() {
+      if (mode === 'all') {
+        return await listTeachingLogs({ subjectId, dateFrom: null, dateTo: null, limit: 200 });
+      } else {
+        return await listTeachingLogs({ subjectId, dateFrom: date, dateTo: date });
+      }
     }
 
-    function render(d) {
-      const log = d.log || {};
-      const t = thaiDate(date);
+    function renderSheet(log, common) {
+      const d = log.date && log.date.slice(0, 10);
+      const t = thaiDateParts(d);
+      const ty = termYear(d);
       const SCHOOL_LOGO = 'https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DLEchopSbfi&sz=w200';
+
       const photoHtml = log.image_url
         ? `<img src="${escapeHtml(log.image_url)}" alt="ภาพการสอน" />`
         : '<span>[ไม่มีรูปภาพ]</span>';
-      const classText = [d.levels, d.years && `ปี${d.years}`, d.rooms && `กลุ่ม${d.rooms}`, d.majors]
+
+      // teacher avatar — initial letter
+      const initial = (common.teacherName || '?').replace(/^(นาย|นาง|นางสาว|น\.ส\.|ว่าที่|ดร\.|ผศ\.)/, '').trim().charAt(0) || '?';
+
+      const classText = [common.levels, common.years && `ปี${common.years}`, common.rooms && `กลุ่ม${common.rooms}`, common.majors]
         .filter(Boolean).join(' ');
 
       const sections = [
@@ -242,42 +303,46 @@
         </div>
       `).join('');
 
-      document.getElementById('sheet').className = '';
-      document.getElementById('sheet').innerHTML = `
-        <div class="doc-header">
-          <img class="logo" src="${SCHOOL_LOGO}" alt="โลโก้" />
-          <div class="title">
-            <div class="title-1">บันทึกหลังการสอน</div>
-            <div class="title-2">วิทยาลัยการอาชีพแกลง</div>
-            <div class="title-3">ภาคเรียนที่ ${d.term}   ปีการศึกษา ${d.academicYear}</div>
+      const att = log.__attendance || { present:0, absent:0, late:0, sick:0, personal:0, total: common.totalEnrolled };
+
+      return `
+        <div class="sheet">
+          <div class="doc-header">
+            <img class="logo" src="${SCHOOL_LOGO}" alt="โลโก้" />
+            <div class="title">
+              <div class="title-1">บันทึกหลังการสอน</div>
+              <div class="title-2">วิทยาลัยการอาชีพแกลง</div>
+              <div class="title-3">ภาคเรียนที่ ${ty.term}   ปีการศึกษา ${ty.academicYear}</div>
+            </div>
+            <div class="photo-cell">
+              <div class="teacher-avatar">${escapeHtml(initial)}</div>
+            </div>
           </div>
-          <div class="photo"><span style="color:#94a3b8;font-size:9pt;">[ภาพครู]</span></div>
-        </div>
 
-        <div class="date-line">
-          <span class="lbl">วันที่ </span><span class="val">....${t.dd}....   </span>
-          <span class="lbl">เดือน </span><span class="val">....${escapeHtml(t.month)}....   </span>
-          <span class="lbl">พ.ศ. </span><span class="val">....${t.yy}....</span>
-        </div>
-
-        <div class="photo-info">
-          <div class="teach-photo">${photoHtml}</div>
-          <div class="info-cell">
-            <div class="info-row"><span class="lbl">รหัสวิชา :</span> <span class="val">${escapeHtml(subjectId)}</span></div>
-            <div class="info-row"><span class="lbl">รายวิชา :</span> <span class="val">${escapeHtml(d.subj?.subject_name || '-')}</span></div>
-            <div class="info-row"><span class="lbl">ระดับชั้น/แผนก :</span> <span class="val">${escapeHtml(classText || '-')}</span></div>
-            <div class="info-row"><span class="lbl">ครูผู้สอน :</span> <span class="val">${escapeHtml(d.teacherName)}</span></div>
-            <div class="info-row"><span class="lbl">จำนวนนักเรียน :</span> <span class="val">${d.attSummary.total} คน / มา ${d.attSummary.present} / ขาด ${d.attSummary.absent} / สาย ${d.attSummary.late} / ลาป่วย ${d.attSummary.sick} / ลากิจ ${d.attSummary.personal}</span></div>
+          <div class="date-line">
+            <span class="lbl">วันที่ </span><span class="val">....${t.dd}....   </span>
+            <span class="lbl">เดือน </span><span class="val">....${escapeHtml(t.month)}....   </span>
+            <span class="lbl">พ.ศ. </span><span class="val">....${t.yy}....</span>
           </div>
-        </div>
 
-        ${sectionsHtml}
+          <div class="photo-info">
+            <div class="teach-photo">${photoHtml}</div>
+            <div class="info-cell">
+              <div class="info-row"><span class="lbl">รหัสวิชา :</span> <span class="val">${escapeHtml(subjectId)}</span></div>
+              <div class="info-row"><span class="lbl">รายวิชา :</span> <span class="val">${escapeHtml(common.subj?.subject_name || '-')}</span></div>
+              <div class="info-row"><span class="lbl">ระดับชั้น/แผนก :</span> <span class="val">${escapeHtml(classText || '-')}</span></div>
+              <div class="info-row"><span class="lbl">ครูผู้สอน :</span> <span class="val">${escapeHtml(common.teacherName)}</span></div>
+              <div class="info-row"><span class="lbl">จำนวนนักเรียน :</span> <span class="val">${att.total} คน / มา ${att.present} / ขาด ${att.absent} / สาย ${att.late} / ลาป่วย ${att.sick} / ลากิจ ${att.personal}</span></div>
+            </div>
+          </div>
+
+          ${sectionsHtml}
+        </div>
       `;
     }
 
     function downloadAsWord() {
-      const sheet = document.getElementById('sheet');
-      // Wrap HTML ให้ Word เปิดอ่านได้
+      const wrap = document.getElementById('wrap');
       const html = `
         <html xmlns:o='urn:schemas-microsoft-com:office:office'
               xmlns:w='urn:schemas-microsoft-com:office:word'
@@ -285,21 +350,30 @@
         <head><meta charset="utf-8" /><title>บันทึกหลังการสอน</title>
         <style>
           body { font-family: 'Sarabun', 'TH SarabunPSK', sans-serif; font-size: 12pt; }
+          .sheet { page-break-after: always; padding: 1cm; }
           .doc-header { width: 100%; }
-          .doc-header table { width: 100%; }
-          .maroon { color: #7B1F2B; font-weight: 700; }
+          .title-1 { color: #7B1F2B; font-weight: 700; font-size: 22pt; text-align: center; }
+          .title-2 { color: #7B1F2B; font-weight: 700; font-size: 16pt; text-align: center; }
+          .title-3 { color: #7B1F2B; font-weight: 700; font-size: 14pt; text-align: center; }
+          .date-line { text-align: center; font-size: 18pt; margin: 8px 0; }
+          .date-line .lbl { color: #7B1F2B; font-weight: 700; }
+          .info-row .lbl { color: #7B1F2B; font-weight: 700; font-size: 14pt; }
           .section-title { color: #7B1F2B; font-weight: 700; font-size: 14pt; margin-top: 8px; }
           .section-body { padding-left: 29px; }
           img { max-width: 320px; }
+          .teacher-avatar { display: none; }
         </style></head>
-        <body>${sheet.innerHTML}</body>
+        <body>${wrap.innerHTML}</body>
         </html>
       `;
       const blob = new Blob(['﻿', html], { type: 'application/msword' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `บันทึกหลังการสอน_${subjectId}_${date}.doc`;
+      const fname = mode === 'all'
+        ? `บันทึกหลังการสอน_${subjectId}_ทั้งหมด.doc`
+        : `บันทึกหลังการสอน_${subjectId}_${date}.doc`;
+      a.download = fname;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -309,15 +383,42 @@
     document.getElementById('btn-do-pdf').onclick = () => window.print();
     document.getElementById('btn-do-word').onclick = downloadAsWord;
 
-    // โหลด + render
-    try {
-      const d = await loadData();
-      render(d);
-      // ถ้ามาจาก URL action → trigger เลย
+    // ---- Main ----
+    async function main() {
+      const common = await loadCommonData();
+      const logs = await loadLogs();
+      if (!logs || logs.length === 0) {
+        document.getElementById('wrap').className = '';
+        document.getElementById('wrap').innerHTML = `
+          <div class="sheet" style="text-align:center;padding-top:3rem;color:#94a3b8;">
+            ⚠ ไม่พบบันทึกหลังการสอน ${mode === 'all' ? 'ของวิชานี้' : 'ของวันที่นี้'}
+          </div>
+        `;
+        return;
+      }
+      // โหลด attendance ของแต่ละ log
+      for (const log of logs) {
+        log.__attendance = await loadAttendanceCount(log.date.slice(0,10), common.totalEnrolled);
+      }
+      logs.sort((a,b) => String(a.date).localeCompare(String(b.date)));
+
+      document.getElementById('wrap').className = '';
+      document.getElementById('wrap').innerHTML = logs.map(log => renderSheet(log, common)).join('');
+
+      if (mode === 'all') {
+        document.getElementById('toolbar-title').innerHTML = `📄 บันทึกหลังการสอน — ${escapeHtml(common.subj?.subject_name || subjectId)} (${logs.length} บันทึก)`;
+      } else {
+        document.getElementById('toolbar-title').innerHTML = `📄 บันทึกหลังการสอน — ${escapeHtml(common.subj?.subject_name || subjectId)}`;
+      }
+
       if (action === 'pdf') setTimeout(() => window.print(), 700);
       if (action === 'word') setTimeout(() => downloadAsWord(), 500);
-    } catch (e) {
-      document.getElementById('sheet').innerHTML = `<div style="color:#dc2626;padding:2rem;">โหลดข้อมูลไม่สำเร็จ: ${escapeHtml(e.message)}</div>`;
+    }
+
+    try { await main(); }
+    catch (e) {
+      document.getElementById('wrap').className = '';
+      document.getElementById('wrap').innerHTML = `<div class="sheet" style="color:#dc2626;padding:2rem;">โหลดข้อมูลไม่สำเร็จ: ${escapeHtml(e.message)}</div>`;
     }
   </script>
 </body>

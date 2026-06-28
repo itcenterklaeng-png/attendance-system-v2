@@ -44,8 +44,11 @@
         <div class="card-subtitle" id="tlr-detail-meta" style="color:var(--text-2);font-size:.85rem;"></div>
       </div>
       <div class="flex no-print" style="gap:.4rem;flex-wrap:wrap;">
-        <button class="btn btn-success btn-sm" id="btn-print-all">
-          <i class="fas fa-print me-1"></i> ปริ้นทั้งหมด
+        <button class="btn btn-danger btn-sm" id="btn-export-all-pdf" title="ส่งออกทุกบันทึกของวิชานี้เป็น PDF">
+          <i class="fas fa-file-pdf me-1"></i> ส่งออก PDF
+        </button>
+        <button class="btn btn-primary btn-sm" id="btn-export-all-word" title="ส่งออกทุกบันทึกของวิชานี้เป็น Word">
+          <i class="fas fa-file-word me-1"></i> ส่งออก Word
         </button>
         <button class="btn btn-secondary btn-sm" id="btn-close-detail">
           <i class="fas fa-times me-1"></i> ปิด
@@ -76,7 +79,14 @@
       document.getElementById('tlr-list-card').style.display = '';
       currentSubjectId = null;
     };
-    document.getElementById('btn-print-all').onclick = () => window.print();
+    document.getElementById('btn-export-all-pdf').onclick = () => {
+      if (!currentSubjectId) return;
+      window.open(`teaching-log-print.html?subject=${encodeURIComponent(currentSubjectId)}&mode=all&action=pdf`, '_blank');
+    };
+    document.getElementById('btn-export-all-word').onclick = () => {
+      if (!currentSubjectId) return;
+      window.open(`teaching-log-print.html?subject=${encodeURIComponent(currentSubjectId)}&mode=all&action=word`, '_blank');
+    };
 
     await loadSubjects();
 
