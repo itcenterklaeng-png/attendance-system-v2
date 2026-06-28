@@ -279,10 +279,10 @@
     let ttRound = null;          // top teachers round filter (null = both)
     let lastSummary = null;      // cache for re-rendering
 
-    // ⭐ สร้าง map subject_id → "สาขา ระดับ.ปี/ห้อง"
-    // ใช้ pagination เผื่อ enrollments เกิน 1000 rows
+    // ⭐ สร้าง map subject_id → { label, sortKey }
+    // sortKey ใช้สำหรับ sort: สาขา → ระดับ → ปี → ห้อง
     async function loadSubjectClassMap() {
-      const map = {};   // subject_id → Set(label)
+      const map = {};   // subject_id → [{ major, level, year, room, label }]
       const PAGE = 1000;
       for (let from = 0; ; from += PAGE) {
         const { data, error } = await supabase
@@ -298,22 +298,46 @@
           const lvl = (c.level || '').trim();
           const yr  = (c.year || '').toString().trim();
           const rm  = (c.room || '').toString().trim();
-          let lbl = major;
           let cls = lvl;
           if (yr) cls += (cls ? '.' : '') + yr;
           if (rm) cls += '/' + rm;
-          const full = [major, cls].filter(Boolean).join(' ');
-          if (full) {
-            if (!map[r.subject_id]) map[r.subject_id] = new Set();
-            map[r.subject_id].add(full);
+          const label = [major, cls].filter(Boolean).join(' ');
+          if (!label) continue;
+          if (!map[r.subject_id]) map[r.subject_id] = [];
+          // dedupe
+          if (!map[r.subject_id].some(x => x.label === label)) {
+            map[r.subject_id].push({ major, level: lvl, year: yr, room: rm, label });
           }
         }
         if (data.length < PAGE) break;
       }
-      // แปลง Set → string
+      // ลำดับ level — ปวช มาก่อน ปวส มาก่อน อื่นๆ
+      const levelRank = (lv) => {
+        const v = (lv || '').replace(/\./g, '').trim();
+        if (v === 'ปวช') return 1;
+        if (v === 'ปวส') return 2;
+        return 9;
+      };
       const out = {};
       Object.keys(map).forEach(sid => {
-        out[sid] = Array.from(map[sid]).sort().join(', ');
+        // sort ห้องของแต่ละวิชา
+        const sorted = map[sid].slice().sort((a, b) =>
+          (a.major || '').localeCompare(b.major || '', 'th') ||
+          levelRank(a.level) - levelRank(b.level) ||
+          (parseInt(a.year, 10) || 0) - (parseInt(b.year, 10) || 0) ||
+          (parseInt(a.room, 10) || 0) - (parseInt(b.room, 10) || 0)
+        );
+        const first = sorted[0];
+        out[sid] = {
+          label: sorted.map(x => x.label).join(', '),
+          // key สำหรับ sort วิชา — ห้องตัวแรก (ต่ำสุด) เป็นตัวแทน
+          sortKey: [
+            (first.major || '').toLowerCase(),
+            String(levelRank(first.level)).padStart(2, '0'),
+            String(parseInt(first.year, 10) || 0).padStart(3, '0'),
+            String(parseInt(first.room, 10) || 0).padStart(3, '0')
+          ].join('|')
+        };
       });
       return out;
     }
@@ -336,8 +360,13 @@
           loadSubjectClassMap()
         ]);
         lastSummary = summary;
-        // merge class label เข้าใน subjects
-        subjects.forEach(s => { s.class_label = classMap[s.subject_id] || ''; });
+        // merge class label + sortKey เข้าใน subjects + เรียงตาม สาขา → ระดับ → ปี → ห้อง
+        subjects.forEach(s => {
+          const m = classMap[s.subject_id];
+          s.class_label = m?.label || '';
+          s._sortKey    = m?.sortKey || 'zzz|99|999|999';   // ไม่มีห้อง → ท้ายสุด
+        });
+        subjects.sort((a, b) => a._sortKey.localeCompare(b._sortKey, 'th'));
         currentSubjects = subjects;
         const s = applyModeToSummary(summary);
         renderHero(s);
