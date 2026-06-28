@@ -58,7 +58,7 @@
       bulkEnroll, bulkUnenroll, getEnrollmentsOfClass,
       listAllEnrollments, getClassEnrollmentDetail,
       getSubjectScheduleCounts, deleteEnrollment,
-      listUsers, updateUserRole
+      listUsers, updateUserRole, adminResetPassword
     } from './js/api.js';
     import { showAlert, esc, formatThaiDate } from './js/utils.js';
 
@@ -1578,8 +1578,9 @@
               <td>${u.must_change_password ? '<span class="text-danger"><i class="fas fa-exclamation-triangle"></i> ใช่</span>' : '<span class="text-success">ไม่</span>'}</td>
               <td>
                 <div class="d-flex gap-1">
-                  <button class="btn btn-sm btn-secondary" data-uid="${esc(u.id)}" data-act="edit"><i class="fas fa-edit"></i> แก้ไข</button>
-                  <button class="btn btn-sm btn-warning" data-uid="${esc(u.id)}" data-act="reset" title="Reset flag เปลี่ยนรหัสครั้งหน้า"><i class="fas fa-redo"></i></button>
+                  <button class="btn btn-sm btn-secondary" data-uid="${esc(u.id)}" data-act="edit" title="แก้ไขข้อมูล"><i class="fas fa-edit"></i> แก้ไข</button>
+                  <button class="btn btn-sm btn-warning" data-uid="${esc(u.id)}" data-act="flag" title="บังคับเปลี่ยนรหัสครั้งหน้า (ไม่ reset รหัส)"><i class="fas fa-flag"></i></button>
+                  <button class="btn btn-sm btn-danger" data-uid="${esc(u.id)}" data-email="${esc(u.email)}" data-act="reset-pwd" title="Reset รหัสผ่าน → 123456789"><i class="fas fa-key"></i></button>
                 </div>
               </td>
             </tr>
@@ -1587,11 +1588,25 @@
         tbody.querySelectorAll('button[data-act="edit"]').forEach(b => {
           b.onclick = () => openUserEditModal(list.find(u => u.id === b.dataset.uid));
         });
-        tbody.querySelectorAll('button[data-act="reset"]').forEach(b => {
+        tbody.querySelectorAll('button[data-act="flag"]').forEach(b => {
           b.onclick = async () => {
-            if (!confirm('Reset flag must_change_password เป็น TRUE? user จะถูกบังคับเปลี่ยนรหัสครั้งหน้า')) return;
+            if (!confirm('ตั้งให้ user คนนี้ต้องเปลี่ยนรหัสตอน login ครั้งหน้า?\n\n(รหัสปัจจุบันยังใช้ได้)')) return;
             try { await updateUserRole(b.dataset.uid, { must_change_password: true }); showAlert('done', 'success'); await renderUsers(); }
             catch (e) { showAlert(e.message, 'error', 0); }
+          };
+        });
+        tbody.querySelectorAll('button[data-act="reset-pwd"]').forEach(b => {
+          b.onclick = async () => {
+            const email = b.dataset.email;
+            const ok = confirm(`🔑 RESET รหัสผ่านของ\n\n  ${email}\n\n→ รหัสใหม่: 123456789\n→ user จะถูกบังคับเปลี่ยนรหัสตอน login ครั้งหน้า\n\nยืนยัน?`);
+            if (!ok) return;
+            try {
+              const r = await adminResetPassword(b.dataset.uid);
+              showAlert(`✅ Reset แล้ว — ${r.email}\nรหัสใหม่: ${r.newPassword}`, 'success', 8000);
+              await renderUsers();
+            } catch (e) {
+              showAlert('Reset fail: ' + e.message, 'error', 0);
+            }
           };
         });
       };

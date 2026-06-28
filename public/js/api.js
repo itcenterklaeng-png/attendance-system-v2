@@ -564,6 +564,31 @@ export async function updateUserRole(userId, patch) {
 }
 
 /**
+ * Reset password ของ user คนอื่น (admin only)
+ *   → เรียก Vercel serverless function /api/admin/reset-password
+ *   → backend ตรวจ JWT + role=admin ก่อน reset
+ */
+export async function adminResetPassword(userId, newPassword) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('ต้อง login ก่อน');
+
+  const body = { userId };
+  if (newPassword) body.newPassword = newPassword;
+
+  const r = await fetch('/api/admin/reset-password', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + session.access_token
+    },
+    body: JSON.stringify(body)
+  });
+  const json = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(json.error || `HTTP ${r.status}`);
+  return json;
+}
+
+/**
  * ดึงตารางสอนของวิชา (periods ของวันนั้น)
  */
 export async function getSubjectSchedule(subjectId, date) {
