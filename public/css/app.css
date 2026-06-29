@@ -3024,14 +3024,23 @@ body.sb-collapsed .main-content { margin-left: 56px !important; }
 
 /* Mobile (≤ 640px): เต็มจอ + footer อยู่ด้านล่างเสมอ (ไม่ใช้ position:fixed) */
 @media (max-width: 640px) {
+  /* ⭐ ลด padding modal-bg = 0 — ให้ modal-card เต็มจอจริง */
+  .modal-bg { padding: 0 !important; align-items: stretch !important; }
+
   .modal-bg .tl-modal-card {
     max-width: 100vw !important;
     width: 100vw;
+    /* 100dvh = dynamic viewport (Safari iOS — ไม่รวม URL bar) */
     max-height: 100vh !important;
+    max-height: 100dvh !important;
     height: 100vh;
+    height: 100dvh;
+    /* JS fallback: ใช้ค่าจาก window.innerHeight ผ่าน CSS var */
+    height: var(--app-vh, 100dvh) !important;
+    max-height: var(--app-vh, 100dvh) !important;
     margin: 0 !important;
     border-radius: 0 !important;
-    padding: 1rem 1rem 0 !important;   /* ลบ padding-bottom — footer มี padding ของตัวเอง */
+    padding: 1rem 1rem 0 !important;
   }
   .modal-bg .modal-close {
     top: 10px !important; right: 12px !important;

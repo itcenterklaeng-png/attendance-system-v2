@@ -31,6 +31,22 @@ export function initLayout(profile, activeId, opts = {}) {
   startClock();
   wireGlobalHandlers();
   startPresence(profile);
+  fixViewportHeight();
+}
+
+// ⭐ Safari iOS — set --app-vh = window.innerHeight จริง (ไม่นับ URL bar)
+function fixViewportHeight() {
+  const update = () => {
+    const h = window.innerHeight + 'px';
+    document.documentElement.style.setProperty('--app-vh', h);
+  };
+  update();
+  window.addEventListener('resize', update);
+  window.addEventListener('orientationchange', () => setTimeout(update, 100));
+  // Safari URL bar เลื่อน — visual viewport เปลี่ยน
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', update);
+  }
 }
 
 function injectFonts() {
