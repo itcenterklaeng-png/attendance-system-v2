@@ -50,11 +50,12 @@
 
   <!-- Modal — ตาม v1 -->
   <div class="modal-bg" id="modal-bg" style="display:none;">
-    <div class="modal-card">
+    <div class="modal-card tl-modal-card">
       <button class="modal-close" id="modal-close">&times;</button>
       <div class="modal-title" id="modal-title">📝 บันทึกหลังการสอน</div>
       <div id="modal-alert"></div>
 
+      <div class="tl-modal-body">
       <div class="row g-2">
         <div class="col-12 col-md-9">
           <label class="form-label fw-bold">วิชา</label>
@@ -142,6 +143,7 @@
         <textarea id="m-problems" class="form-control" rows="3"
                   placeholder="ปัญหาที่พบ, สิ่งที่ทำให้ไม่บรรลุเป้าหมาย, ข้อจำกัด..."></textarea>
       </div>
+      </div><!-- /.tl-modal-body -->
 
       <div class="tl-modal-footer">
         <button class="btn btn-danger" id="btn-export-pdf" style="display:none;" title="ส่งออกเป็นไฟล์ PDF">
