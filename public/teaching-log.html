@@ -257,7 +257,6 @@
         <div class="log-row" onclick="_editLog(${l.id})">
           <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
             <div style="font-weight:700;color:var(--primary);min-width:120px;">${esc(formatThaiDate(l.date))}</div>
-            <span class="badge bg-secondary">คาบ ${esc(l.periods || '-')}</span>
             <span style="font-size:.85rem;color:var(--text-2);"><code>${esc(l.subject_id)}</code> · ${esc(l.subject_name || '-')}</span>
           </div>
           <div style="color:var(--text-2);font-size:.9rem;margin-top:.4rem;">
@@ -494,9 +493,28 @@
       border-radius: 8px; padding: 12px 16px;
       margin-bottom: 8px; cursor: pointer;
       transition: all .15s; position: relative;
+      padding-right: 90px;       /* room for buttons */
     }
     .log-row:hover { border-color: var(--primary); transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,.06); }
-    .log-actions { position: absolute; top: 10px; right: 12px; display: flex; gap: 4px; }
+    .log-actions { position: absolute; top: 10px; right: 12px; display: flex; gap: 4px; z-index: 2; }
+
+    /* ⭐ Mobile — เนื้อหา full width + ปุ่มเล็กลงเป็น icon */
+    @media (max-width: 640px) {
+      .log-row { padding: 10px 12px; padding-right: 12px; }
+      .log-actions {
+        position: static !important;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px dashed #e5e7eb;
+        justify-content: flex-end;
+        gap: 6px;
+      }
+      .log-actions .btn {
+        min-height: 32px !important;
+        padding: 4px 10px !important;
+        font-size: 12px !important;
+      }
+    }
     .modal-bg {
       position: fixed; inset: 0;
       background: rgba(0,0,0,.55);
