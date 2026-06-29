@@ -146,13 +146,6 @@
       </div><!-- /.tl-modal-body -->
 
       <div class="tl-modal-footer">
-        <button class="btn btn-danger" id="btn-export-pdf" style="display:none;" title="ส่งออกเป็นไฟล์ PDF">
-          <i class="fas fa-file-pdf me-1"></i> PDF
-        </button>
-        <button class="btn btn-info" id="btn-export-word" style="display:none;color:#fff;" title="ส่งออกเป็นไฟล์ Word">
-          <i class="fas fa-file-word me-1"></i> Word
-        </button>
-        <div style="flex:1;"></div>
         <button class="btn btn-secondary" id="modal-cancel">ยกเลิก</button>
         <button class="btn btn-primary btn-lg" id="btn-save-log">
           <i class="fas fa-save me-1"></i> บันทึก
@@ -441,31 +434,12 @@
       // trigger char counter
       document.getElementById('m-content').dispatchEvent(new Event('input'));
 
-      // แสดงปุ่ม Export ก็ต่อเมื่อมี subject + date (มีข้อมูลพอจะ export ได้)
-      const canExport = !!sid && !!document.getElementById('m-date').value;
-      document.getElementById('btn-export-pdf').style.display = canExport ? '' : 'none';
-      document.getElementById('btn-export-word').style.display = canExport ? '' : 'none';
-
       modalBg.style.display = 'flex';
       document.body.classList.add('modal-open');
       // scroll modal-card ไป top
       const card = modalBg.querySelector('.modal-card');
       if (card) card.scrollTop = 0;
     }
-
-    // ===== Export buttons — เปิดหน้า print preview ใน tab ใหม่ =====
-    document.getElementById('btn-export-pdf').onclick = () => {
-      const sid = document.getElementById('m-subject').value;
-      const date = document.getElementById('m-date').value;
-      if (!sid || !date) { showAlert('ต้องมีวิชา + วันที่', 'warn', 0); return; }
-      window.open(`teaching-log-print.html?subject=${encodeURIComponent(sid)}&date=${date}&action=pdf`, '_blank');
-    };
-    document.getElementById('btn-export-word').onclick = () => {
-      const sid = document.getElementById('m-subject').value;
-      const date = document.getElementById('m-date').value;
-      if (!sid || !date) { showAlert('ต้องมีวิชา + วันที่', 'warn', 0); return; }
-      window.open(`teaching-log-print.html?subject=${encodeURIComponent(sid)}&date=${date}&action=word`, '_blank');
-    };
 
     async function saveLog() {
       const content = document.getElementById('m-content').value;
