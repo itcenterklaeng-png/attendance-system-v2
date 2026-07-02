@@ -3014,16 +3014,19 @@ body.sb-collapsed .main-content { margin-left: 56px !important; }
 /* ⭐ Textarea แนวตั้งเท่านั้น — ไม่ให้ user drag ให้กว้างเกิน modal */
 .tl-modal-body textarea.form-control { resize: vertical; max-width: 100%; }
 
-/* ⭐ Phase 36 — Font size ใน modal fields = เท่ากับ label (~ .92rem) */
-.tl-modal-body .form-label { font-size: .92rem; }
+/* ⭐ Phase 36 — Font ใน modal fields = 13px (เท่ากับ label default) */
+.tl-modal-body .form-label { font-size: 13px !important; }
 .tl-modal-body input.form-control,
 .tl-modal-body select.form-control,
 .tl-modal-body select.form-select,
-.tl-modal-body textarea.form-control {
-  font-size: .92rem;
+.tl-modal-body textarea.form-control,
+.tl-modal-body textarea.form-control::placeholder,
+.tl-modal-body input.form-control::placeholder {
+  font-size: 13px !important;
 }
 /* Mobile — ป้องกัน iOS zoom (ต้องอย่างน้อย 16px) */
 @media (max-width: 640px) {
+  .tl-modal-body .form-label { font-size: 14px !important; }
   .tl-modal-body input.form-control,
   .tl-modal-body select.form-control,
   .tl-modal-body select.form-select,
