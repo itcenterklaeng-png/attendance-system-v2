@@ -283,13 +283,19 @@
     .sh-cell--absent   { background: #fee2e2; color: #b91c1c; }
     .sh-cell--empty    { color: #cbd5e1; }
 
-    /* Print */
+    /* Print — bulletproof: hide ทุกอย่าง แล้ว show เฉพาะ #sh-content */
     @media print {
-      body { background: #fff !important; font-size: 11px; }
-      #sidebar, #sidebar-overlay, .topbar, .no-print { display: none !important; }
-      #main-content { margin-left: 0 !important; padding: 0 !important; }
-      .print-only { display: block !important; }
-      .card { box-shadow: none !important; border: none !important; padding: 0 !important; margin: 0 !important; }
+      body { background: #fff !important; font-size: 11px; margin: 0 !important; padding: 0 !important; }
+      body * { visibility: hidden !important; }
+      #sh-content, #sh-content * { visibility: visible !important; }
+      #sh-content {
+        position: absolute !important;
+        left: 0 !important; top: 0 !important;
+        width: 100% !important;
+        margin: 0 !important; padding: 0 !important;
+      }
+      .no-print, #sidebar, #sidebar-overlay, .topbar { display: none !important; }
+      .print-only { display: block !important; visibility: visible !important; }
       .sh-table { font-size: 10px; page-break-inside: auto; }
       .sh-table tr { page-break-inside: avoid; page-break-after: auto; }
       .sh-date-th { font-size: 9px; }
