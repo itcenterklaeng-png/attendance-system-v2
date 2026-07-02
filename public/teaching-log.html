@@ -502,6 +502,14 @@
     }
     .log-row:hover { border-color: var(--primary); transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,.06); }
     .log-actions { position: absolute; top: 10px; right: 12px; display: flex; gap: 4px; z-index: 2; }
+    /* ⭐ ปุ่ม แก้/ลบ เล็กลง — desktop */
+    .log-actions .btn {
+      min-height: 28px !important;
+      padding: 2px 8px !important;
+      font-size: 12px !important;
+      line-height: 1;
+    }
+    .log-actions .btn i { font-size: 12px; }
 
     /* ⭐ Mobile — เนื้อหา full width + ปุ่มเล็กลงเป็น icon */
     @media (max-width: 640px) {
