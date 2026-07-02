@@ -203,15 +203,25 @@
       // teacher info — ใช้ของผู้ใช้ปัจจุบัน
       let teacherName = profile.teacher_full_name || profile.full_name || profile.email;
       let teacherDept = profile.department || '';
+      let teacherPhoto = null;
+      // โหลด photo_url จาก teachers table (ของ profile หรือของครูที่สอนวิชา)
+      if (profile.teacher_id) {
+        const { data: myTeacher } = await supabase
+          .from('teachers')
+          .select('photo_url')
+          .eq('teacher_id', profile.teacher_id).maybeSingle();
+        if (myTeacher?.photo_url) teacherPhoto = myTeacher.photo_url;
+      }
       // ถ้าครูใน subject_teachers เป็นคนอื่น (เช่น admin ดู logs ของครู) → ใช้ของครูคนนั้น
       if (profile.role === 'admin') {
         const { data: st } = await supabase
           .from('subject_teachers')
-          .select('teacher_id, teachers(full_name, department)')
+          .select('teacher_id, teachers(full_name, department, photo_url)')
           .eq('subject_id', subjectId).limit(1).maybeSingle();
         if (st && st.teachers) {
           teacherName = st.teachers.full_name || teacherName;
           teacherDept = st.teachers.department || teacherDept;
+          teacherPhoto = st.teachers.photo_url || teacherPhoto;
         }
       }
 
@@ -232,7 +242,7 @@
       const years  = [...new Set(classList.map(c => c.year).filter(Boolean))].join(', ');
       const rooms  = [...new Set(classList.map(c => c.room).filter(Boolean))].join(', ');
 
-      return { subj, teacherName, teacherDept, majors, levels, years, rooms, totalEnrolled: enrolledStudentIds.size };
+      return { subj, teacherName, teacherDept, teacherPhoto, majors, levels, years, rooms, totalEnrolled: enrolledStudentIds.size };
     }
 
     // ---- โหลด attendance ของวันที่กำหนด ----
@@ -315,7 +325,9 @@
               <div class="title-3">ภาคเรียนที่ ${ty.term}   ปีการศึกษา ${ty.academicYear}</div>
             </div>
             <div class="photo-cell">
-              <div class="teacher-avatar">${escapeHtml(initial)}</div>
+              ${common.teacherPhoto
+                ? `<img src="${escapeHtml(common.teacherPhoto)}" alt="ครูผู้สอน" style="width:96px;height:96px;border-radius:50%;object-fit:cover;box-shadow:0 4px 12px rgba(123,31,43,.25);" onerror="this.outerHTML='<div class=\\'teacher-avatar\\'>${escapeHtml(initial)}</div>';">`
+                : `<div class="teacher-avatar">${escapeHtml(initial)}</div>`}
             </div>
           </div>
 
