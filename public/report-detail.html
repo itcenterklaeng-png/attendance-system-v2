@@ -175,14 +175,14 @@
             }
             table.sh-table td:first-child, table.sh-table th:first-child { text-align: left; }
             table.sh-table tr { page-break-inside: avoid; }
-            .sh-cell { text-align: center; font-size: 9pt; display: inline-block; padding: 1px 4px; border-radius: 3px; }
-            /* ⭐ ใช้ class ที่ตรงกับ HTML — sh-cell--XXX (double dash) */
-            .sh-cell--present  { color: #16a34a !important; font-weight: 700; }
-            .sh-cell--absent   { color: #fff !important; background: #dc2626 !important; font-weight: 700; }
-            .sh-cell--late     { color: #fff !important; background: #d97706 !important; font-weight: 700; }
-            .sh-cell--sick     { color: #fff !important; background: #6366f1 !important; font-weight: 700; }
-            .sh-cell--personal { color: #fff !important; background: #9333ea !important; font-weight: 700; }
-            .sh-cell--empty    { color: #94a3b8 !important; }
+            .sh-cell { text-align: center; font-size: 9pt; display: inline-block; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+            /* ⭐ สีเหมือนหน้าเว็บ — soft background + text เข้ม */
+            .sh-cell--present  { color: #16a34a !important; background: #dcfce7 !important; }
+            .sh-cell--absent   { color: #dc2626 !important; background: #fee2e2 !important; }
+            .sh-cell--late     { color: #d97706 !important; background: #fed7aa !important; }
+            .sh-cell--sick     { color: #6366f1 !important; background: #e0e7ff !important; }
+            .sh-cell--personal { color: #9333ea !important; background: #f3e8ff !important; }
+            .sh-cell--empty    { color: #94a3b8 !important; background: transparent !important; }
             .no-print, .empty-state { display: none !important; }
             @page { size: A4 landscape; margin: 10mm; }
             @media print { body { margin: 0; } }
