@@ -123,7 +123,13 @@
         (s.subject_id || '').toLowerCase().includes(q) ||
         (s.subject_name || '').toLowerCase().includes(q)
       );
-      visible.sort((a, b) => (a.subject_name || '').localeCompare(b.subject_name || '', 'th'));
+      // ⭐ เรียงตามวันเริ่มสอน (start_date) — วิชาที่เริ่มก่อน อยู่บน
+      visible.sort((a, b) => {
+        const da = a.start_date || '9999-12-31';
+        const db = b.start_date || '9999-12-31';
+        if (da !== db) return String(da).localeCompare(String(db));
+        return (a.subject_name || '').localeCompare(b.subject_name || '', 'th');
+      });
 
       document.getElementById('tlr-count').textContent = visible.length + ' วิชา';
 
