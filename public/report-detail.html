@@ -125,13 +125,80 @@
       renderHistory(matrix, dates, summary);
 
       if (autoprint) {
-        setTimeout(() => window.print(), 600);
+        setTimeout(() => customPrint(), 600);
       }
     } catch (e) {
       document.getElementById('sh-content').innerHTML = `<div class="alert alert-error">โหลด fail: ${esc(e.message)}</div>`;
     }
 
-    document.getElementById('btn-print').onclick = () => window.print();
+    // ⭐ Custom print — เปิด popup window ใหม่ที่มีแค่ header + table (bulletproof)
+    function customPrint() {
+      const content = document.getElementById('sh-content').innerHTML;
+      const printHeader = document.getElementById('sh-print-header').innerHTML;
+      const title = 'รายงานการเช็คชื่อ ' + (document.getElementById('sh-print-subject')?.textContent || '');
+
+      const w = window.open('', '_blank', 'width=1200,height=800');
+      if (!w) { alert('Browser block popup — กรุณา allow popup แล้วลองใหม่'); return; }
+      w.document.write(`
+        <!DOCTYPE html>
+        <html lang="th">
+        <head>
+          <meta charset="UTF-8">
+          <title>${esc(title)}</title>
+          <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+          <style>
+            * { box-sizing: border-box; }
+            body {
+              font-family: 'Sarabun', 'TH SarabunPSK', sans-serif;
+              font-size: 11px; margin: 10mm; color: #000;
+            }
+            .print-header { margin-bottom: 8px; }
+            .print-header h2 { text-align: center; margin: 0 0 4px; font-size: 16pt; }
+            .print-header .school { text-align: center; font-size: 12pt; color: #555; margin-bottom: 6px; }
+            .print-header table { width: 100%; font-size: 10pt; border-collapse: collapse; }
+            .print-header table td { padding: 2px 4px; }
+            .print-header hr { margin: 6px 0; }
+            table { width: 100%; border-collapse: collapse; }
+            table.sh-table th, table.sh-table td {
+              border: 1px solid #d1d5db;
+              padding: 3px 4px;
+              text-align: center;
+              font-size: 9pt;
+              white-space: nowrap;
+            }
+            table.sh-table thead th {
+              background: #f0f2f5 !important;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            table.sh-table td:first-child, table.sh-table th:first-child { text-align: left; }
+            table.sh-table tr { page-break-inside: avoid; }
+            .sh-cell { text-align: center; font-size: 9pt; }
+            .sh-cell.present { color: #16a34a; font-weight: 700; }
+            .sh-cell.absent  { color: #dc2626; font-weight: 700; }
+            .sh-cell.late    { color: #d97706; font-weight: 700; }
+            .sh-cell.sick    { color: #6366f1; font-weight: 700; }
+            .sh-cell.leave-s { color: #9333ea; font-weight: 700; }
+            .no-print, .empty-state { display: none !important; }
+            @page { size: A4 landscape; margin: 10mm; }
+            @media print { body { margin: 0; } }
+          </style>
+        </head>
+        <body>
+          <div class="print-header">${printHeader}</div>
+          ${content}
+          <script>
+            window.onload = function() {
+              setTimeout(function() { window.print(); }, 300);
+              window.onafterprint = function() { window.close(); };
+            };
+          <\/script>
+        </body>
+        </html>
+      `);
+      w.document.close();
+    }
+    document.getElementById('btn-print').onclick = customPrint;
 
     function renderHistory(matrix, dates, summary) {
       const box = document.getElementById('sh-content');
