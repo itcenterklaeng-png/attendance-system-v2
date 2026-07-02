@@ -201,14 +201,15 @@ function injectShell(profile, activeId, opts) {
     </div>
     <div class="sidebar-nav" style="padding:8px 0;flex:1;overflow-y:auto;">${navItems}</div>
     <div class="sidebar-footer" style="padding:12px;border-top:1px solid rgba(255,255,255,.1);">
-      <div class="user-info" style="display:flex;align-items:center;gap:10px;padding:8px;border-radius:9px;background:rgba(255,255,255,.07);margin-bottom:8px;">
+      <a href="profile.html" class="user-info" title="คลิกเพื่อดู/แก้ไขโปรไฟล์" style="display:flex;align-items:center;gap:10px;padding:8px;border-radius:9px;background:rgba(255,255,255,.07);margin-bottom:8px;text-decoration:none;color:inherit;cursor:pointer;transition:background .15s;" onmouseover="this.style.background='rgba(255,255,255,.14)'" onmouseout="this.style.background='rgba(255,255,255,.07)'">
         <div class="user-avatar" style="width:36px;height:36px;border-radius:50%;background:rgba(255,214,0,.15);border:2px solid rgba(255,214,0,.5);display:flex;align-items:center;justify-content:center;color:#ffd600;font-size:20px;flex-shrink:0;"><i class="fas fa-user-circle"></i></div>
         <div style="flex:1;min-width:0;">
           <div class="user-name" title="${escapeHtml(name)}" style="font-weight:600;font-size:13px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(name)}</div>
           <div class="user-role" style="font-size:11px;color:#ffd600;">${role}</div>
           ${teacherIdLine}
         </div>
-      </div>
+        <i class="fas fa-pen" style="color:rgba(255,255,255,.4);font-size:11px;"></i>
+      </a>
       <button class="btn-foot" onclick="window.location.href='change-password.html'" style="width:100%;padding:8px 12px;background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12.5px;font-family:inherit;text-align:left;margin-bottom:6px;">
         <i class="fas fa-key"></i> เปลี่ยนรหัสผ่าน
       </button>

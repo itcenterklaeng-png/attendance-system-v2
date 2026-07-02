@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#1a237e" />
+  <title>โปรไฟล์ของฉัน — ระบบเช็คชื่อนักเรียน</title>
+  <link rel="icon" href="https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DLEchopSbfi&sz=w128" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div id="alert-area"></div>
+
+  <div class="card" style="max-width:640px;margin:0 auto;">
+    <div class="card-header">
+      <div class="card-title"><i class="fas fa-user-circle me-1"></i> โปรไฟล์ของฉัน</div>
+    </div>
+
+    <div id="prof-content">
+      <div class="empty-state"><div class="spinner" style="margin:0 auto 1rem;"></div><p>กำลังโหลด...</p></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth } from './js/auth.js';
+    import { initLayout } from './js/layout.js';
+    import { supabase } from './js/supabase-client.js';
+    import { showAlert, esc } from './js/utils.js';
+
+    const profile = await requireAuth();
+    if (!profile) throw new Error('not authed');
+    initLayout(profile, 'profile', { title: 'โปรไฟล์ของฉัน', icon: 'fa-user-circle' });
+
+    async function load() {
+      const box = document.getElementById('prof-content');
+      // ดึงข้อมูล teacher ล่าสุดจาก DB
+      let teacher = null;
+      if (profile.teacher_id) {
+        const { data, error } = await supabase
+          .from('teachers')
+          .select('teacher_id, full_name, email, phone, department, status')
+          .eq('teacher_id', profile.teacher_id)
+          .maybeSingle();
+        if (!error && data) teacher = data;
+      }
+
+      const role = profile.role === 'admin' ? 'ผู้ดูแลระบบ'
+                 : profile.role === 'executive' ? 'ผู้บริหาร'
+                 : 'ครู';
+      const roleBg = profile.role === 'admin' ? '#dc2626'
+                   : profile.role === 'executive' ? '#9333ea'
+                   : '#4f46e5';
+
+      const initial = ((teacher?.full_name || profile.full_name || profile.email || '?')
+        .replace(/^(นาย|นาง|นางสาว|น\.ส\.|ว่าที่|ดร\.|ผศ\.)/, '').trim().charAt(0) || '?').toUpperCase();
+
+      box.innerHTML = `
+        <div style="text-align:center;padding:1.5rem 1rem .5rem;">
+          <div style="width:110px;height:110px;border-radius:50%;background:linear-gradient(135deg,#1a237e,#3949ab);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:44px;font-weight:800;box-shadow:0 6px 18px rgba(26,35,126,.35);">
+            ${esc(initial)}
+          </div>
+          <div style="margin-top:.8rem;font-weight:700;font-size:1.15rem;color:#1a237e;">
+            ${esc(teacher?.full_name || profile.full_name || profile.email)}
+          </div>
+          <div style="margin-top:.3rem;">
+            <span style="background:${roleBg};color:#fff;padding:3px 12px;border-radius:999px;font-size:.82rem;font-weight:600;">${esc(role)}</span>
+            ${profile.teacher_id ? `<span style="margin-left:6px;background:#e0e7ff;color:#3730a3;padding:3px 10px;border-radius:999px;font-size:.82rem;font-weight:600;">รหัสครู: ${esc(profile.teacher_id)}</span>` : ''}
+          </div>
+        </div>
+
+        <div class="row g-2" style="padding:1rem 0 0;">
+          <div class="col-12">
+            <label class="form-label fw-bold">Email <span style="color:#94a3b8;font-weight:400;">(แก้ไม่ได้)</span></label>
+            <input id="p-email" class="form-control" value="${esc(profile.auth_email || profile.email || '')}" readonly style="background:#f1f5f9;color:#64748b;">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-bold">ชื่อ-สกุล *</label>
+            <input id="p-fullname" class="form-control" value="${esc(teacher?.full_name || profile.full_name || '')}" ${profile.teacher_id ? '' : 'disabled'} placeholder="เช่น นายพงศกร พงษ์พันนา">
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-bold">เบอร์โทรศัพท์</label>
+            <input id="p-phone" class="form-control" value="${esc(teacher?.phone || '')}" ${profile.teacher_id ? '' : 'disabled'} placeholder="0XXXXXXXXX" maxlength="15">
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-bold">แผนก</label>
+            <input id="p-dept" class="form-control" value="${esc(teacher?.department || profile.department || '')}" ${profile.teacher_id ? '' : 'disabled'} placeholder="เช่น ช่างยนต์">
+          </div>
+        </div>
+
+        <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border,#e5e7eb);display:flex;gap:.5rem;flex-wrap:wrap;justify-content:flex-end;">
+          <a href="change-password.html" class="btn btn-secondary">
+            <i class="fas fa-key me-1"></i> เปลี่ยนรหัสผ่าน
+          </a>
+          <button class="btn btn-primary btn-lg" id="btn-save" ${profile.teacher_id ? '' : 'disabled'}>
+            <i class="fas fa-save me-1"></i> บันทึกโปรไฟล์
+          </button>
+        </div>
+
+        ${profile.teacher_id ? '' : `
+          <div class="alert alert-info" style="margin-top:1rem;">
+            <i class="fas fa-info-circle me-1"></i> บัญชี admin นี้ไม่ได้ผูกกับรหัสครู — ไม่สามารถแก้ไขข้อมูลได้
+          </div>
+        `}
+      `;
+
+      if (profile.teacher_id) {
+        document.getElementById('btn-save').onclick = save;
+      }
+    }
+
+    async function save() {
+      const btn = document.getElementById('btn-save');
+      const fullName = document.getElementById('p-fullname').value.trim();
+      const phone    = document.getElementById('p-phone').value.trim();
+      const dept     = document.getElementById('p-dept').value.trim();
+
+      if (!fullName) {
+        showAlert('กรุณากรอกชื่อ-สกุล', 'error', 0);
+        document.getElementById('p-fullname').focus();
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> กำลังบันทึก...';
+
+      try {
+        const { error } = await supabase
+          .from('teachers')
+          .update({
+            full_name: fullName,
+            phone: phone || null,
+            department: dept || null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('teacher_id', profile.teacher_id);
+        if (error) throw error;
+        showAlert('✅ บันทึกโปรไฟล์สำเร็จ', 'success', 3000);
+        setTimeout(() => window.location.reload(), 800);
+      } catch (e) {
+        showAlert('บันทึก fail: ' + e.message, 'error', 0);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save me-1"></i> บันทึกโปรไฟล์';
+      }
+    }
+
+    await load();
+  </script>
+</body>
+</html>
