@@ -40,7 +40,9 @@
     /* A4 print sheets */
     #wrap { padding: 1cm 0; }
     .sheet {
-      width: 21cm; min-height: 29.7cm;
+      width: 21cm;
+      height: 29.7cm;        /* ⭐ fix height A4 — บังคับ 1 หน้า */
+      max-height: 29.7cm;
       margin: 0 auto 1cm;
       background: #fff;
       padding: .5cm 1.2cm 1cm;
@@ -48,6 +50,8 @@
       font-size: 12pt;
       line-height: 1.4;
       page-break-after: always;
+      overflow: hidden;      /* ตัดส่วนที่เกินออก (safety) */
+      box-sizing: border-box;
     }
     .sheet:last-child { page-break-after: auto; }
     #wrap.loading {
@@ -306,10 +310,32 @@
         ['4. ผลการจัดการเรียนการสอน', log.results],
         ['5. ปัญหาและอุปสรรคในการจัดการเรียนการสอน', log.problems]
       ];
+      // ⭐ Auto-fit ให้พอดี 1 หน้า A4 — คำนวณจากจำนวนตัวอักษร + จำนวนบรรทัด
+      const totalChars = sections.reduce((s, [_, body]) => s + ((body || '').trim().length), 0);
+      const totalLines = sections.reduce((s, [_, body]) => {
+        const txt = (body || '').trim();
+        return s + (txt ? txt.split(/\r?\n/).filter(l => l.trim()).length : 0);
+      }, 0);
+      // เกณฑ์: หน้า A4 landscape/portrait ที่มี header + info + 5 sections
+      // Base 12pt = ~600 chars, ~15 lines พอดี
+      let bodyFontSize, titleFontSize, sectionGap, lineHeight;
+      if (totalChars > 3500 || totalLines > 45) {
+        bodyFontSize = 8;  titleFontSize = 11; sectionGap = 2; lineHeight = 1.15;
+      } else if (totalChars > 2500 || totalLines > 32) {
+        bodyFontSize = 9;  titleFontSize = 12; sectionGap = 3; lineHeight = 1.2;
+      } else if (totalChars > 1800 || totalLines > 22) {
+        bodyFontSize = 10; titleFontSize = 13; sectionGap = 4; lineHeight = 1.25;
+      } else if (totalChars > 1000 || totalLines > 14) {
+        bodyFontSize = 11; titleFontSize = 13; sectionGap = 5; lineHeight = 1.3;
+      } else {
+        bodyFontSize = 12; titleFontSize = 14; sectionGap = 6; lineHeight = 1.35;
+      }
+      const dynStyle = `font-size:${bodyFontSize}pt !important; line-height:${lineHeight} !important;`;
+      const dynTitle = `font-size:${titleFontSize}pt !important; margin-top:${sectionGap}px !important;`;
       const sectionsHtml = sections.map(([title, body]) => `
         <div class="section">
-          <div class="section-title">${escapeHtml(title)}</div>
-          <div class="section-body">${escapeHtml((body || '—').trim() || '—')}</div>
+          <div class="section-title" style="${dynTitle}">${escapeHtml(title)}</div>
+          <div class="section-body" style="${dynStyle}">${escapeHtml((body || '—').trim() || '—')}</div>
         </div>
       `).join('');
 
