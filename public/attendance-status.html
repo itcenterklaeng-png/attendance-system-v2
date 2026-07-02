@@ -124,7 +124,7 @@
         return;
       }
 
-      list.innerHTML = data.map(s => {
+      list.innerHTML = data.map((s, idx) => {
         const sid = String(s.subjectId);
         const isOpen = !!state.expanded[sid];
         const total = s.totalDates || 0;
@@ -192,8 +192,9 @@
           <div class="cs-card">
             <div class="cs-header ${isOpen ? 'is-open' : ''}" data-sid="${esc(sid)}">
               <i class="fas fa-${isOpen ? 'chevron-down' : 'chevron-right'}" style="color:#6b7280;width:14px;"></i>
+              <span style="color:#1a237e;font-weight:700;min-width:22px;text-align:right;">${idx + 1}.</span>
               <i class="fas fa-book" style="color:#94a3b8;"></i>
-              <span class="cs-name">${esc(s.subjectName)}${s.major ? ` <span style="color:#6b7280;font-weight:400;font-size:.85rem;">· ${esc(s.major)}</span>` : ''}</span>
+              <span class="cs-name">วิชา ${esc(s.subjectName)}${s.major ? ` <span style="color:#6b7280;font-weight:400;font-size:.85rem;">· ${esc(s.major)}</span>` : ''}</span>
               <span class="cs-summary">
                 📅 ${total} วัน · 🌅 ${r1}/${total} · 🔁 ${r2}/${total} · 📝 ${tl}/${total}
               </span>
@@ -218,10 +219,12 @@
       list.innerHTML = `<div class="empty-state"><div class="spinner" style="margin:0 auto 1rem;"></div><p>กำลังโหลด...</p></div>`;
       try {
         state.data = await getCheckStatusForTeacher(tid);
-        // natural sort by subject_id (ถ้ารหัสเป็นเลข)
-        state.data.sort((a, b) =>
-          String(a.subjectId || '').localeCompare(String(b.subjectId || ''), undefined, { numeric: true, sensitivity: 'base' })
-        );
+        // ⭐ เรียงตามวันแรกที่สอน (วิชาที่สอนก่อน อยู่บน)
+        state.data.sort((a, b) => {
+          const da = (a.dates && a.dates[0] && a.dates[0].date) || '9999-12-31';
+          const db = (b.dates && b.dates[0] && b.dates[0].date) || '9999-12-31';
+          return String(da).localeCompare(String(db));
+        });
         render();
       } catch (e) {
         list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><p>โหลดไม่สำเร็จ: ${esc(e.message)}</p></div>`;
