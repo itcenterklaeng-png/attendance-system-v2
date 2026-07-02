@@ -3007,9 +3007,31 @@ body.sb-collapsed .main-content { margin-left: 56px !important; }
 .tl-modal-body {
   flex: 1 1 auto;
   overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   padding-bottom: .75rem;
 }
+/* ⭐ Textarea แนวตั้งเท่านั้น — ไม่ให้ user drag ให้กว้างเกิน modal */
+.tl-modal-body textarea.form-control { resize: vertical; max-width: 100%; }
+
+/* ⭐ Phase 36 — Font size ใน modal fields = เท่ากับ label (~ .92rem) */
+.tl-modal-body .form-label { font-size: .92rem; }
+.tl-modal-body input.form-control,
+.tl-modal-body select.form-control,
+.tl-modal-body select.form-select,
+.tl-modal-body textarea.form-control {
+  font-size: .92rem;
+}
+/* Mobile — ป้องกัน iOS zoom (ต้องอย่างน้อย 16px) */
+@media (max-width: 640px) {
+  .tl-modal-body input.form-control,
+  .tl-modal-body select.form-control,
+  .tl-modal-body select.form-select,
+  .tl-modal-body textarea.form-control {
+    font-size: 16px !important;
+  }
+}
+
 .tl-modal-footer {
   display: flex; gap: .5rem;
   justify-content: flex-end;
