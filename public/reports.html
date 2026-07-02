@@ -100,11 +100,11 @@
           return hay.includes(q);
         });
       }
-      // sort: มีคาบวันนี้ก่อน → ชื่อ
+      // ⭐ sort ตามวันเริ่มสอน (start_date) — วิชาที่เริ่มก่อน อยู่บน
       visible.sort((a, b) => {
-        const aHas = a.s.today_periods ? 0 : 1;
-        const bHas = b.s.today_periods ? 0 : 1;
-        if (aHas !== bHas) return aHas - bHas;
+        const da = a.s.start_date || '9999-12-31';
+        const db = b.s.start_date || '9999-12-31';
+        if (da !== db) return String(da).localeCompare(String(db));
         return (a.s.subject_name || '').localeCompare(b.s.subject_name || '', 'th');
       });
 
