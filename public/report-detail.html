@@ -166,19 +166,23 @@
               font-size: 9pt;
               white-space: nowrap;
             }
+            /* ⭐ บังคับให้ browser พิมพ์สี — user ไม่ต้องติ๊ก "กราฟิกพื้นหลัง" */
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
             table.sh-table thead th {
-              background: #f0f2f5 !important;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
+              background: #e0e7ff !important;
+              color: #1e1b4b !important;
+              font-weight: 700 !important;
             }
             table.sh-table td:first-child, table.sh-table th:first-child { text-align: left; }
             table.sh-table tr { page-break-inside: avoid; }
-            .sh-cell { text-align: center; font-size: 9pt; }
-            .sh-cell.present { color: #16a34a; font-weight: 700; }
-            .sh-cell.absent  { color: #dc2626; font-weight: 700; }
-            .sh-cell.late    { color: #d97706; font-weight: 700; }
-            .sh-cell.sick    { color: #6366f1; font-weight: 700; }
-            .sh-cell.leave-s { color: #9333ea; font-weight: 700; }
+            .sh-cell { text-align: center; font-size: 9pt; display: inline-block; padding: 1px 4px; border-radius: 3px; }
+            /* ⭐ ใช้ class ที่ตรงกับ HTML — sh-cell--XXX (double dash) */
+            .sh-cell--present  { color: #16a34a !important; font-weight: 700; }
+            .sh-cell--absent   { color: #fff !important; background: #dc2626 !important; font-weight: 700; }
+            .sh-cell--late     { color: #fff !important; background: #d97706 !important; font-weight: 700; }
+            .sh-cell--sick     { color: #fff !important; background: #6366f1 !important; font-weight: 700; }
+            .sh-cell--personal { color: #fff !important; background: #9333ea !important; font-weight: 700; }
+            .sh-cell--empty    { color: #94a3b8 !important; }
             .no-print, .empty-state { display: none !important; }
             @page { size: A4 landscape; margin: 10mm; }
             @media print { body { margin: 0; } }
