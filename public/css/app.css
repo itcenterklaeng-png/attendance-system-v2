@@ -3003,7 +3003,12 @@ body.sb-collapsed .main-content { margin-left: 56px !important; }
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
+  overflow-x: hidden !important;
+  overflow-y: hidden !important;
 }
+/* base .modal-card override — ถ้ามี overflow-y: auto จาก base จะบล็อกตรงนี้ */
+.modal-bg .modal-card.tl-modal-card { overflow: hidden !important; }
+.tl-modal-body * { max-width: 100%; box-sizing: border-box; }
 .tl-modal-body {
   flex: 1 1 auto;
   overflow-y: auto;
