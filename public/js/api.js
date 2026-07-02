@@ -254,6 +254,25 @@ export async function saveTeachingLog({
  */
 const TEACHING_LOG_BUCKET = 'teaching-logs';
 
+/**
+ * Upload รูปโปรไฟล์ครู (reuse bucket teaching-logs, subfolder profiles/)
+ */
+export async function uploadTeacherPhoto(file, teacherId, ext = 'jpg') {
+  const ts = Date.now();
+  const path = `profiles/${teacherId}-${ts}.${ext}`;
+  const { error } = await supabase.storage
+    .from(TEACHING_LOG_BUCKET)
+    .upload(path, file, {
+      contentType: file.type || `image/${ext}`,
+      upsert: true
+    });
+  if (error) throw error;
+  const { data: { publicUrl } } = supabase.storage
+    .from(TEACHING_LOG_BUCKET)
+    .getPublicUrl(path);
+  return { url: publicUrl, path };
+}
+
 export async function uploadTeachingLogImage(file, { subjectId, ext = 'jpg' }) {
   const ts = Date.now();
   const rand = Math.random().toString(36).slice(2, 8);
