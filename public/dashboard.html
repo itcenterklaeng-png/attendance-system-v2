@@ -705,14 +705,20 @@
       }
       const ok = '<i class="fas fa-check-circle" style="color:#15803d;font-size:1.1rem;"></i>';
       const ng = '<i class="fas fa-times-circle" style="color:#dc2626;font-size:1.1rem;"></i>';
-      tbody.innerHTML = list.map((r, i) => {
+
+      // ⭐ แบ่ง 2 กลุ่ม: Homeroom + วิชาอื่น
+      const isHomeroom = (r) => /^homeroom/i.test((r.subject_name || '').trim());
+      const homerooms = list.filter(isHomeroom);
+      const others = list.filter(r => !isHomeroom(r));
+
+      const renderRow = (r, idx) => {
         const pct = r.pct_present;
         const pctCls = pct == null ? 'text-muted' : pct >= 80 ? 'text-success' : pct >= 60 ? 'text-warning' : 'text-danger';
         const pctTxt = pct == null ? '—' : pct + '%';
         const uncheckedBadge = r.unchecked > 0 ? `<span class="badge bg-warning text-dark">${r.unchecked}</span>` : `<span class="text-muted">0</span>`;
         return `
           <tr style="cursor:pointer;" data-sid="${esc(r.subject_id)}" data-name="${esc(r.subject_name)}">
-            <td class="text-center"><b>${i + 1}</b></td>
+            <td class="text-center"><b>${idx}</b></td>
             <td>${esc(r.subject_name)}</td>
             <td style="font-size:.8rem;color:var(--text-2);">${esc(r.teacher_names || '-')}</td>
             <td style="font-size:.82rem;color:#3949ab;font-weight:600;">${esc(r.class_label || '-')}</td>
@@ -729,7 +735,27 @@
             <td class="text-center">${r.has_teaching_log ? ok : ng}</td>
           </tr>
         `;
-      }).join('');
+      };
+
+      const groupHeader = (label, count, bg, color) => `
+        <tr style="background:${bg};pointer-events:none;">
+          <td colspan="15" style="padding:.5rem .75rem;font-weight:700;font-size:.9rem;color:${color};border-left:4px solid ${color};">
+            ${esc(label)} <span style="opacity:.7;font-weight:400;font-size:.8rem;">(${count} วิชา)</span>
+          </td>
+        </tr>
+      `;
+
+      let html = '';
+      let counter = 0;
+      if (homerooms.length > 0) {
+        html += groupHeader('🏫 Homeroom', homerooms.length, '#fef3c7', '#78350f');
+        homerooms.forEach(r => { counter++; html += renderRow(r, counter); });
+      }
+      if (others.length > 0) {
+        html += groupHeader('📚 วิชาอื่น', others.length, '#e0e7ff', '#312e81');
+        others.forEach(r => { counter++; html += renderRow(r, counter); });
+      }
+      tbody.innerHTML = html;
       tbody.querySelectorAll('tr[data-sid]').forEach(tr => {
         tr.onclick = () => openSubjectDetail(tr.dataset.sid, tr.dataset.name);
       });
