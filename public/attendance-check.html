@@ -112,6 +112,34 @@
   </div>
 
   <!-- ✨ Success Modal (หลังบันทึกสำเร็จ) -->
+  <!-- ⚠ Modal เตือนเช็คไม่ครบ -->
+  <div id="incomplete-modal" class="att-modal-bg" style="display:none;">
+    <div class="att-modal-card" style="max-width:460px;">
+      <div class="att-modal-header" style="border-bottom:1px solid #fef3c7;">
+        <i class="fas fa-exclamation-triangle" style="color:#d97706;font-size:1.6rem;"></i>
+        <div>
+          <div class="att-modal-title" style="color:#92400e;">ยังเช็คไม่ครบ</div>
+          <div class="att-modal-sub">กรุณาเช็คให้ครบทุกคนก่อนบันทึก</div>
+        </div>
+      </div>
+
+      <div class="att-confirm-summary">
+        <div class="att-summary-row"><span>👥 นักเรียนทั้งหมด</span> <b id="im-total">0</b></div>
+        <div class="att-summary-row" style="background:#dcfce7;"><span>✅ เช็คแล้ว</span> <b id="im-checked" style="color:#16a34a;">0</b></div>
+        <div class="att-summary-row" style="background:#fee2e2;"><span>⚠ ยังไม่ได้เช็ค</span> <b id="im-missing" style="color:#dc2626;font-size:1.15rem;">0</b></div>
+
+        <div style="margin-top:.6rem;font-size:.85rem;color:#374151;font-weight:600;">รายชื่อที่ยังไม่ได้เช็ค:</div>
+        <div id="im-names" style="margin-top:.35rem;"></div>
+      </div>
+
+      <div class="att-modal-actions">
+        <button class="btn btn-warning" id="im-close" style="min-width:180px;">
+          <i class="fas fa-arrow-left me-1"></i> ปิด — กลับไปเช็ค
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div id="success-modal" class="att-modal-bg" style="display:none;">
     <div class="att-modal-card att-success-card">
       <div class="att-success-circle">
@@ -467,8 +495,54 @@
 
     document.getElementById('btn-save').onclick = () => {
       if (currentRecords.size === 0) { showAlert('ยังไม่ได้เลือกสถานะ', 'error', 0); return; }
+      // ⭐ บังคับเช็คครบ 100%
+      const total = currentStudents.length;
+      const checked = currentRecords.size;
+      if (checked < total) {
+        openIncompleteModal(total, checked);
+        return;
+      }
       openConfirmModal();
     };
+
+    // ===== ⚠ Modal เตือนเช็คไม่ครบ =====
+    function openIncompleteModal(total, checked) {
+      const missing = total - checked;
+      // list ชื่อนักเรียนที่ยังไม่เช็ค (แสดง 5 คนแรก)
+      const notCheckedNames = currentStudents
+        .filter(s => !currentRecords.has(s.student_id))
+        .map(s => s.full_name);
+      const shownNames = notCheckedNames.slice(0, 5);
+      const restCount = notCheckedNames.length - shownNames.length;
+
+      const modal = document.getElementById('incomplete-modal');
+      document.getElementById('im-total').textContent = total;
+      document.getElementById('im-checked').textContent = checked;
+      document.getElementById('im-missing').textContent = missing;
+      document.getElementById('im-names').innerHTML = shownNames.map(n =>
+        `<div class="att-summary-row" style="background:#fee2e2;color:#991b1b;justify-content:flex-start;gap:.5rem;"><i class="fas fa-user-slash"></i> ${esc(n)}</div>`
+      ).join('') + (restCount > 0 ? `<div style="text-align:center;color:#6b7280;font-size:.85rem;margin-top:.35rem;">...และอีก ${restCount} คน</div>` : '');
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+    function closeIncompleteModal() {
+      document.getElementById('incomplete-modal').style.display = 'none';
+      document.body.style.overflow = '';
+    }
+    // wire events (ทำหลัง DOM element ถูกสร้างใน HTML)
+    setTimeout(() => {
+      const modal = document.getElementById('incomplete-modal');
+      if (modal) {
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeIncompleteModal(); });
+        document.getElementById('im-close').onclick = closeIncompleteModal;
+      }
+    }, 0);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const im = document.getElementById('incomplete-modal');
+        if (im && im.style.display === 'flex') closeIncompleteModal();
+      }
+    });
     document.getElementById('cm-ok').onclick = async () => {
       const ok = document.getElementById('cm-ok');
       ok.disabled = true; ok.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> กำลังบันทึก...';
