@@ -91,6 +91,90 @@
   }
   .sr-actions button.primary { background: var(--navy); color: white; border-color: var(--navy); }
 
+  /* Category summary */
+  .sr-cat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px;
+  }
+  .sr-cat-card {
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    overflow: hidden;
+    background: white;
+  }
+  .sr-cat-head {
+    color: white;
+    padding: 10px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+  }
+  .sr-cat-body {
+    padding: 14px 12px;
+    text-align: center;
+  }
+  .sr-cat-avg {
+    font-size: 34px;
+    font-weight: 800;
+    line-height: 1;
+  }
+  .sr-cat-max {
+    font-size: 11px;
+    color: #94A3B8;
+    margin: 2px 0 6px;
+  }
+  .sr-cat-level {
+    display: inline-block;
+    background: var(--gold-soft);
+    color: #92400E;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .sr-cat-bar {
+    height: 6px;
+    background: #F1F5F9;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 4px;
+  }
+  .sr-cat-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+  }
+  .sr-cat-qcount {
+    font-size: 11px;
+    color: #94A3B8;
+  }
+  /* Category sections in detail */
+  .sr-cat-section {
+    margin-bottom: 18px;
+    padding-bottom: 12px;
+    border-bottom: 1px dashed #E2E8F0;
+  }
+  .sr-cat-section:last-child { border-bottom: none; }
+  .sr-cat-sec-title {
+    font-weight: 700;
+    padding: 4px 0 4px 10px;
+    margin: 8px 0 10px;
+    border-left: 4px solid;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .sr-cat-sec-avg {
+    color: white;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
   @media (max-width: 700px) {
     .sr-bar-row { grid-template-columns: 130px 1fr 45px; font-size: 12px; }
   }
@@ -131,6 +215,15 @@
     q20:'ระบบใหม่ดีกว่าเดิม', q21:'ลดเวลาการทำงาน', q22:'เช็คชื่อแม่นยำขึ้น',
     q23:'ความพึงพอใจภาพรวม', q24:'จะแนะนำเพื่อนครูใช้'
   };
+
+  // ✨ 5 ด้านของแบบสอบถาม
+  const CATEGORIES = [
+    { key: 'design',   icon: '🎨', name: 'ด้านการออกแบบและใช้งาน', qs: ['q1','q2','q3','q4','q5'],           color: '#3949AB' },
+    { key: 'perf',     icon: '⚡', name: 'ด้านประสิทธิภาพ',           qs: ['q6','q7','q8','q9'],                color: '#7B1F2B' },
+    { key: 'features', icon: '✅', name: 'ด้านฟังก์ชันการใช้งาน',     qs: ['q10','q11','q12','q13','q14','q15','q16'], color: '#16a34a' },
+    { key: 'security', icon: '🔒', name: 'ด้านความปลอดภัย',           qs: ['q17','q18','q19'],                  color: '#B45309' },
+    { key: 'overall',  icon: '🎯', name: 'ด้านภาพรวม',                qs: ['q20','q21','q22','q23','q24'],      color: '#1A237E' }
+  ];
   const ROLE_LABEL = { teacher:'ครูผู้สอน', staff:'เจ้าหน้าที่', executive:'ผู้บริหาร', admin:'ผู้ดูแลระบบ' };
 
   const survey = await getActiveSurvey();
@@ -203,6 +296,10 @@
         }).join('')}
       </div>
 
+      ${renderCategorySummary(avg, roleFilter)}
+
+      ${renderByCategory(avg, roleFilter)}
+
       <div class="sr-card">
         <div class="sr-card-title">📈 คะแนนเฉลี่ยรายข้อ (เรียงจากสูงสุด)${roleFilter!=='all'?' — เฉพาะ '+ROLE_LABEL[roleFilter]:''}</div>
         ${sorted.length ? sorted.map(([q, v]) => renderBar(q, v)).join('') : '<p style="color:#94A3B8;text-align:center;padding:20px;">ยังไม่มีข้อมูล</p>'}
@@ -214,6 +311,65 @@
     document.querySelectorAll('.sr-chip').forEach(c => {
       c.addEventListener('click', () => render(c.dataset.r));
     });
+  }
+
+  /** สรุปคะแนนเฉลี่ยของแต่ละด้าน (5 การ์ด) */
+  function renderCategorySummary(avg, roleFilter) {
+    const cats = CATEGORIES.map(c => {
+      const vals = c.qs.map(q => avg[q]).filter(v => v != null);
+      const catAvg = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+      return { ...c, avg: catAvg };
+    });
+    return `
+      <div class="sr-card">
+        <div class="sr-card-title">🏆 คะแนนเฉลี่ยแยกตามด้าน${roleFilter!=='all'?' — เฉพาะ '+ROLE_LABEL[roleFilter]:''}</div>
+        <div class="sr-cat-grid">
+          ${cats.map(c => {
+            if (c.avg == null) return `
+              <div class="sr-cat-card">
+                <div class="sr-cat-head" style="background:${c.color}">${c.icon} ${escapeHtml(c.name)}</div>
+                <div class="sr-cat-body"><div style="color:#94A3B8;text-align:center;padding:16px;">-</div></div>
+              </div>`;
+            const pct = (c.avg/5)*100;
+            const level = c.avg >= 4.5 ? 'มากที่สุด' : c.avg >= 3.5 ? 'มาก' : c.avg >= 2.5 ? 'ปานกลาง' : c.avg >= 1.5 ? 'น้อย' : 'น้อยที่สุด';
+            return `
+              <div class="sr-cat-card">
+                <div class="sr-cat-head" style="background:${c.color}">${c.icon} ${escapeHtml(c.name)}</div>
+                <div class="sr-cat-body">
+                  <div class="sr-cat-avg" style="color:${c.color}">${c.avg.toFixed(2)}</div>
+                  <div class="sr-cat-max">/ 5.00</div>
+                  <div class="sr-cat-level">${level}</div>
+                  <div class="sr-cat-bar"><div class="sr-cat-bar-fill" style="width:${pct}%;background:${c.color};"></div></div>
+                  <div class="sr-cat-qcount">${c.qs.length} ข้อ · ${pct.toFixed(1)}%</div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  /** รายข้อ แต่ group ตามด้าน */
+  function renderByCategory(avg, roleFilter) {
+    return `
+      <div class="sr-card">
+        <div class="sr-card-title">📊 คะแนนรายข้อ แยกตามด้าน${roleFilter!=='all'?' — เฉพาะ '+ROLE_LABEL[roleFilter]:''}</div>
+        ${CATEGORIES.map(c => {
+          const vals = c.qs.map(q => avg[q]).filter(v => v != null);
+          const catAvg = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+          return `
+            <div class="sr-cat-section">
+              <div class="sr-cat-sec-title" style="border-left-color:${c.color};color:${c.color}">
+                ${c.icon} ${escapeHtml(c.name)}
+                ${catAvg != null ? `<span class="sr-cat-sec-avg" style="background:${c.color}">เฉลี่ย ${catAvg.toFixed(2)}</span>` : ''}
+              </div>
+              ${c.qs.map(q => renderBar(q, avg[q] ?? 0)).join('')}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
   }
 
   function renderBar(qKey, val) {
