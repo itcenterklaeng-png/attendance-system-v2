@@ -632,3 +632,59 @@ export async function getSubjectSchedule(subjectId, date) {
   if (error) throw error;
   return data?.periods || '';
 }
+
+// ============================================
+// Survey — แบบสอบถามความพึงพอใจ
+// ============================================
+
+/** ดึงแบบสอบถามที่ active */
+export async function getActiveSurvey() {
+  const { data, error } = await supabase
+    .from('surveys')
+    .select('*')
+    .eq('active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/** เช็คว่า user ตอบแบบสอบถาม active หรือยัง */
+export async function hasRespondedActiveSurvey() {
+  const { data, error } = await supabase.rpc('has_responded_active_survey');
+  if (error) throw error;
+  return data === true;
+}
+
+/** บันทึกคำตอบ (1 คน 1 ครั้ง) */
+export async function submitSurveyResponse(surveyId, payload) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('not authed');
+  const row = { survey_id: surveyId, user_id: user.id, ...payload };
+  const { data, error } = await supabase
+    .from('survey_responses')
+    .insert(row)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/** สรุปสถิติ (admin/executive) */
+export async function getSurveyStats(surveyId = null) {
+  const { data, error } = await supabase.rpc('get_survey_stats', { p_survey_id: surveyId });
+  if (error) throw error;
+  return data;
+}
+
+/** ดึง responses ทั้งหมด (admin/executive) — สำหรับคอมเมนต์ปลายเปิด */
+export async function getSurveyResponses(surveyId) {
+  const { data, error } = await supabase
+    .from('survey_responses')
+    .select('*')
+    .eq('survey_id', surveyId)
+    .order('submitted_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}

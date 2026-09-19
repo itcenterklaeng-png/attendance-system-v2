@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#1a237e" />
+<title>สรุปผลแบบสอบถาม — วก.แกลง</title>
+<link rel="icon" href="https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DLEchopSbfi&sz=w128" />
+<link rel="stylesheet" href="css/app.css" />
+<style>
+  :root {
+    --navy: #1A237E;
+    --navy-light: #3949AB;
+    --maroon: #7B1F2B;
+    --gold: #FFD600;
+    --gold-soft: #FEF3C7;
+    --green: #16a34a;
+    --red: #dc2626;
+  }
+  .sr-wrap { max-width: 1200px; margin: 0 auto; padding: 16px; }
+  .sr-title {
+    font-size: 22px; color: var(--navy); font-weight: 700; margin: 0 0 4px;
+  }
+  .sr-subtitle { color: #64748B; font-size: 13px; margin-bottom: 20px; }
+  .sr-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .sr-stat {
+    background: white; border-radius: 10px; padding: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06); text-align: center;
+  }
+  .sr-stat .label { font-size: 12px; color: #64748B; }
+  .sr-stat .value { font-size: 30px; font-weight: 700; color: var(--navy); line-height: 1; margin: 4px 0; }
+  .sr-stat.green .value { color: var(--green); }
+  .sr-stat.gold .value { color: #B45309; }
+
+  .sr-filter {
+    background: var(--gold-soft); padding: 10px; border-radius: 8px;
+    display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 16px;
+  }
+  .sr-filter .lbl { font-size: 13px; font-weight: 600; color: #92400E; margin-right: 8px; }
+  .sr-chip {
+    padding: 5px 12px; background: white; border: 1px solid #E2E8F0;
+    border-radius: 20px; font-size: 13px; cursor: pointer;
+  }
+  .sr-chip.on { background: var(--navy); color: white; border-color: var(--navy); }
+
+  .sr-card {
+    background: white; border-radius: 10px; padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06); margin-bottom: 16px;
+  }
+  .sr-card-title {
+    font-size: 16px; font-weight: 700; color: var(--navy); margin-bottom: 12px;
+  }
+  .sr-bar-row {
+    display: grid; grid-template-columns: 260px 1fr 55px;
+    gap: 10px; padding: 6px 0; align-items: center; font-size: 13px;
+  }
+  .sr-bar-label { color: #334155; }
+  .sr-bar-track {
+    height: 22px; background: #F1F5F9; border-radius: 4px; overflow: hidden;
+  }
+  .sr-bar-fill { height: 100%; border-radius: 4px; }
+  .sr-bar-value { font-weight: 700; color: var(--navy); text-align: right; }
+
+  .sr-comment-tabs {
+    display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap;
+  }
+  .sr-comment {
+    padding: 12px; background: #F8FAFC; border-left: 3px solid var(--navy);
+    border-radius: 6px; font-size: 13px; margin-bottom: 8px;
+  }
+  .sr-comment .meta {
+    font-size: 11px; color: #94A3B8; margin-bottom: 4px;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .sr-role-tag {
+    background: var(--navy); color: white; padding: 1px 8px; border-radius: 10px; font-size: 10px;
+  }
+  .sr-role-tag.staff { background: var(--green); }
+  .sr-role-tag.executive { background: var(--maroon); }
+  .sr-role-tag.admin { background: #6b7280; }
+
+  .sr-actions { display: flex; gap: 8px; justify-content: flex-end; margin-bottom: 12px; }
+  .sr-actions button {
+    padding: 8px 14px; border: 1px solid #E2E8F0; background: white; border-radius: 6px;
+    cursor: pointer; font-size: 13px; font-family: inherit;
+  }
+  .sr-actions button.primary { background: var(--navy); color: white; border-color: var(--navy); }
+
+  @media (max-width: 700px) {
+    .sr-bar-row { grid-template-columns: 130px 1fr 45px; font-size: 12px; }
+  }
+  @media print {
+    .sr-actions, .sr-filter, .sr-comment-tabs { display: none !important; }
+    body { background: white; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app" class="sr-wrap">
+  <div style="text-align:center;padding:40px;">กำลังโหลดข้อมูล...</div>
+</div>
+
+<script type="module">
+  import { requireAuth } from './js/auth.js';
+  import { supabase } from './js/supabase-client.js';
+  import { getActiveSurvey, getSurveyStats, getSurveyResponses } from './js/api.js';
+
+  // Guard: admin/executive only + skip survey guard
+  const profile = await requireAuth({ requireSurvey: false });
+  if (!profile) throw new Error('not authed');
+  if (profile.role !== 'admin' && profile.role !== 'executive') {
+    document.getElementById('app').innerHTML = '<div style="padding:40px;text-align:center;color:#dc2626;">🔒 หน้านี้เฉพาะผู้ดูแลระบบและผู้บริหาร</div>';
+    throw new Error('forbidden');
+  }
+
+  const QUESTION_LABELS = {
+    q1:'หน้าจอสวยงาม อ่านง่าย', q2:'เมนู/ปุ่ม ใช้งานสะดวก', q3:'ตัวหนังสือขนาดเหมาะสม',
+    q4:'สีสันเหมาะสม ไม่ล้าตา', q5:'ใช้งานง่ายบนมือถือ',
+    q6:'เปิดหน้าเว็บรวดเร็ว', q7:'บันทึกข้อมูลได้ทันที', q8:'ระบบเสถียร ไม่ล่ม',
+    q9:'รองรับใช้งานพร้อมกัน',
+    q10:'เช็คชื่อง่ายและรวดเร็ว', q11:'บันทึกหลังสอนสะดวก', q12:'แนบภาพประกอบใช้ง่าย',
+    q13:'รายงานสถิติครบถ้วน', q14:'Export PDF ใช้งานดี', q15:'แก้ไขย้อนหลังสะดวก',
+    q16:'ระบบเตือนเช็คไม่ครบ',
+    q17:'เข้าสู่ระบบปลอดภัย', q18:'ข้อมูลได้รับการปกป้อง', q19:'มั่นใจข้อมูลไม่สูญหาย',
+    q20:'ระบบใหม่ดีกว่าเดิม', q21:'ลดเวลาการทำงาน', q22:'เช็คชื่อแม่นยำขึ้น',
+    q23:'ความพึงพอใจภาพรวม', q24:'จะแนะนำเพื่อนครูใช้'
+  };
+  const ROLE_LABEL = { teacher:'ครูผู้สอน', staff:'เจ้าหน้าที่', executive:'ผู้บริหาร', admin:'ผู้ดูแลระบบ' };
+
+  const survey = await getActiveSurvey();
+  if (!survey) {
+    document.getElementById('app').innerHTML = '<div style="padding:40px;text-align:center;">ไม่มีแบบสอบถามในระบบ</div>';
+    throw new Error('no survey');
+  }
+
+  const responses = await getSurveyResponses(survey.id);
+  const stats = await getSurveyStats(survey.id);
+
+  // Count of active users
+  const { count: userCount } = await supabase
+    .from('users').select('id', { count: 'exact', head: true }).eq('status','active');
+
+  render('all');
+
+  function render(roleFilter) {
+    const rows = roleFilter === 'all' ? responses : responses.filter(r => r.role === roleFilter);
+    const n = rows.length;
+    const avg = computeAvg(rows);
+    const grand = grandAvg(avg);
+    const grandLabel = grand >= 4.5 ? 'มากที่สุด' : grand >= 3.5 ? 'มาก' : grand >= 2.5 ? 'ปานกลาง' : grand >= 1.5 ? 'น้อย' : 'น้อยที่สุด';
+    const pct = userCount ? Math.round(responses.length / userCount * 100) : 0;
+    const commentCount = countComments(rows);
+
+    // Sort questions by avg desc
+    const sorted = Object.entries(avg)
+      .filter(([_,v]) => v != null)
+      .sort((a,b) => b[1] - a[1]);
+
+    document.getElementById('app').innerHTML = `
+      <h1 class="sr-title">📊 สรุปผลแบบสอบถามความพึงพอใจ</h1>
+      <div class="sr-subtitle">${escapeHtml(survey.title)}</div>
+
+      <div class="sr-actions">
+        <button onclick="window.print()">🖨️ พิมพ์รายงาน</button>
+        <button class="primary" onclick="window.location.href='dashboard.html'">← กลับแดชบอร์ด</button>
+      </div>
+
+      <div class="sr-stats">
+        <div class="sr-stat">
+          <div class="label">จำนวนผู้ตอบ</div>
+          <div class="value">${responses.length}</div>
+          <div class="label">จาก ${userCount || '?'} คน (${pct}%)</div>
+        </div>
+        <div class="sr-stat green">
+          <div class="label">คะแนนเฉลี่ยรวม</div>
+          <div class="value">${grand.toFixed(2)}</div>
+          <div class="label">จากคะแนนเต็ม 5.00</div>
+        </div>
+        <div class="sr-stat gold">
+          <div class="label">ระดับความพึงพอใจ</div>
+          <div class="value">${grandLabel}</div>
+          <div class="label">${(grand/5*100).toFixed(1)}%</div>
+        </div>
+        <div class="sr-stat">
+          <div class="label">คำตอบปลายเปิด</div>
+          <div class="value">${commentCount}</div>
+          <div class="label">ความคิดเห็น</div>
+        </div>
+      </div>
+
+      <div class="sr-filter">
+        <span class="lbl">🔍 กรองตามบทบาท:</span>
+        ${['all','teacher','staff','executive','admin'].map(k => {
+          const cnt = k==='all' ? responses.length : responses.filter(r=>r.role===k).length;
+          const label = k==='all' ? 'ทั้งหมด' : ROLE_LABEL[k];
+          return `<span class="sr-chip ${k===roleFilter?'on':''}" data-r="${k}">${label} (${cnt})</span>`;
+        }).join('')}
+      </div>
+
+      <div class="sr-card">
+        <div class="sr-card-title">📈 คะแนนเฉลี่ยรายข้อ (เรียงจากสูงสุด)${roleFilter!=='all'?' — เฉพาะ '+ROLE_LABEL[roleFilter]:''}</div>
+        ${sorted.length ? sorted.map(([q, v]) => renderBar(q, v)).join('') : '<p style="color:#94A3B8;text-align:center;padding:20px;">ยังไม่มีข้อมูล</p>'}
+      </div>
+
+      ${renderCommentSection(rows)}
+    `;
+
+    document.querySelectorAll('.sr-chip').forEach(c => {
+      c.addEventListener('click', () => render(c.dataset.r));
+    });
+  }
+
+  function renderBar(qKey, val) {
+    const pct = (val/5)*100;
+    const color = val >= 4.5 ? '#16a34a' : val >= 4 ? '#65a30d' : val >= 3.5 ? '#F59E0B' : val >= 2.5 ? '#EAB308' : '#DC2626';
+    const qNum = qKey.replace('q','');
+    return `
+      <div class="sr-bar-row">
+        <div class="sr-bar-label">${qNum}. ${escapeHtml(QUESTION_LABELS[qKey] || qKey)}</div>
+        <div class="sr-bar-track"><div class="sr-bar-fill" style="width:${pct}%;background:${color};"></div></div>
+        <div class="sr-bar-value">${val.toFixed(2)}</div>
+      </div>
+    `;
+  }
+
+  function renderCommentSection(rows) {
+    const cats = [
+      ['like_most','💚 ฟังก์ชันที่ชอบมากที่สุด'],
+      ['improve','🔧 ควรปรับปรุง'],
+      ['add_feature','✨ อยากให้เพิ่ม'],
+      ['problems','⚠️ ปัญหาที่พบ'],
+      ['suggestions','💬 ข้อเสนอแนะอื่นๆ']
+    ];
+    return `
+      <div class="sr-card">
+        <div class="sr-card-title">💬 ความคิดเห็นปลายเปิด (Anonymous)</div>
+        ${cats.map(([key, title]) => {
+          const items = rows.filter(r => (r[key] || '').trim()).slice(0, 20);
+          if (!items.length) return '';
+          return `
+            <h4 style="color:var(--maroon);margin:14px 0 8px;font-size:14px;">${title} (${items.length})</h4>
+            ${items.map(r => `
+              <div class="sr-comment">
+                <div class="meta">
+                  <span class="sr-role-tag ${r.role}">${ROLE_LABEL[r.role] || r.role}</span>
+                  <span>${new Date(r.submitted_at).toLocaleDateString('th-TH')}</span>
+                </div>
+                ${escapeHtml(r[key])}
+              </div>
+            `).join('')}
+          `;
+        }).join('') || '<p style="color:#94A3B8;text-align:center;padding:20px;">ยังไม่มีความคิดเห็นปลายเปิด</p>'}
+      </div>
+    `;
+  }
+
+  function computeAvg(rows) {
+    const out = {};
+    for (let i=1; i<=24; i++) {
+      const key = 'q'+i;
+      const vals = rows.map(r => r[key]).filter(v => v != null);
+      out[key] = vals.length ? vals.reduce((a,b)=>a+b,0) / vals.length : null;
+    }
+    return out;
+  }
+  function grandAvg(avg) {
+    const vals = Object.values(avg).filter(v => v != null);
+    if (!vals.length) return 0;
+    return vals.reduce((a,b)=>a+b,0) / vals.length;
+  }
+  function countComments(rows) {
+    let n = 0;
+    rows.forEach(r => {
+      ['like_most','improve','add_feature','problems','suggestions'].forEach(k => {
+        if ((r[k] || '').trim()) n++;
+      });
+    });
+    return n;
+  }
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+</script>
+
+</body>
+</html>

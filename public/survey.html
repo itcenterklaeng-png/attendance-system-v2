@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#1a237e" />
+<title>แบบสอบถามความพึงพอใจ — วก.แกลง</title>
+<link rel="icon" href="https://drive.google.com/thumbnail?id=1fWwwh6htzUfnuJ_UGUlY5DLEchopSbfi&sz=w128" />
+<link rel="stylesheet" href="css/app.css" />
+<style>
+  :root {
+    --navy: #1A237E;
+    --navy-light: #3949AB;
+    --gold: #FFD600;
+    --gold-soft: #FEF3C7;
+    --green: #16a34a;
+    --red: #dc2626;
+  }
+  body {
+    background: linear-gradient(135deg, #EEF2FF 0%, #F8FAFC 100%);
+    min-height: 100vh;
+    font-family: 'Sarabun', sans-serif;
+    padding: 16px;
+    margin: 0;
+  }
+  .sv-wrap {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .sv-notice {
+    background: #FEE2E2;
+    color: #991B1B;
+    border-left: 4px solid var(--red);
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .sv-header {
+    background: var(--navy);
+    color: white;
+    padding: 20px 24px;
+    border-radius: 12px 12px 0 0;
+  }
+  .sv-header h1 { margin: 0 0 4px; font-size: 22px; }
+  .sv-header p { margin: 0; opacity: .9; font-size: 13px; }
+  .sv-body {
+    background: white;
+    padding: 24px;
+    border-radius: 0 0 12px 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.08);
+  }
+  .sv-progress {
+    background: var(--gold-soft);
+    padding: 10px 14px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .sv-progress .bar {
+    flex: 1;
+    height: 8px;
+    background: rgba(0,0,0,.08);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .sv-progress .fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--gold), #F59E0B);
+    border-radius: 4px;
+    transition: width .3s;
+    width: 0%;
+  }
+  .sv-progress .label {
+    font-size: 13px;
+    color: #92400E;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .sv-section {
+    margin-bottom: 28px;
+    padding: 18px;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    background: #FDFDFD;
+  }
+  .sv-section-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--navy);
+    padding-bottom: 10px;
+    margin-bottom: 14px;
+    border-bottom: 2px solid var(--gold);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sv-section-title .badge {
+    background: var(--navy);
+    color: white;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+  }
+  .sv-cat-title {
+    color: #7B1F2B;
+    margin: 14px 0 6px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .sv-field { margin-bottom: 14px; }
+  .sv-field-label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 6px;
+    font-size: 14px;
+    color: #334155;
+  }
+  .sv-field-label .req { color: var(--red); }
+  .sv-radios { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sv-radios label {
+    padding: 7px 12px;
+    border: 1.5px solid #E2E8F0;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13.5px;
+    background: white;
+    transition: all .15s;
+    user-select: none;
+  }
+  .sv-radios label:hover { border-color: var(--navy-light); }
+  .sv-radios input { display: none; }
+  .sv-radios label.checked {
+    border-color: var(--navy);
+    background: #EEF2FF;
+    color: var(--navy);
+    font-weight: 600;
+  }
+  .sv-rating-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 4px;
+    border-bottom: 1px dashed #E2E8F0;
+  }
+  .sv-rating-row:last-child { border-bottom: none; }
+  .sv-rating-q { font-size: 13.5px; color: #334155; }
+  .sv-rating-q .num { color: #94A3B8; font-weight: 700; margin-right: 4px; }
+  .sv-rating-btns { display: flex; gap: 4px; }
+  .sv-rating-btns button {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    border: 2px solid #E2E8F0;
+    background: white;
+    cursor: pointer;
+    font-weight: 700;
+    color: #64748B;
+    font-family: inherit;
+    font-size: 14px;
+    transition: all .12s;
+  }
+  .sv-rating-btns button:hover { border-color: var(--navy-light); }
+  .sv-rating-btns button.on {
+    background: var(--navy);
+    color: white;
+    border-color: var(--navy);
+    transform: scale(1.08);
+  }
+  .sv-rating-btns button.on-5 { background: #16a34a; border-color: #16a34a; }
+  .sv-rating-btns button.on-4 { background: #65a30d; border-color: #65a30d; }
+  .sv-legend { font-size: 11.5px; color: #64748B; text-align: right; margin-bottom: 8px; }
+  textarea.sv-textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1.5px solid #E2E8F0;
+    border-radius: 8px;
+    resize: vertical;
+    min-height: 70px;
+    font-family: inherit;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+  textarea.sv-textarea:focus { outline: none; border-color: var(--navy); }
+  .sv-submit {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 16px;
+    border-top: 1px solid #E2E8F0;
+    gap: 10px;
+    align-items: center;
+  }
+  .sv-submit .err {
+    color: var(--red);
+    font-size: 13px;
+    margin-right: auto;
+  }
+  .btn-sv-submit {
+    background: var(--navy);
+    color: white;
+    border: none;
+    padding: 12px 28px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 15px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .btn-sv-submit:hover { background: var(--navy-light); }
+  .btn-sv-submit:disabled { background: #94A3B8; cursor: not-allowed; }
+
+  .sv-success {
+    text-align: center;
+    padding: 40px 20px;
+  }
+  .sv-success .icon {
+    font-size: 72px;
+    margin-bottom: 12px;
+  }
+  .sv-success h2 { color: var(--green); margin: 0 0 8px; }
+  .sv-success p { color: #64748B; margin: 4px 0; }
+  .sv-success button {
+    margin-top: 20px;
+    background: var(--navy);
+    color: white;
+    border: none;
+    padding: 12px 28px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  @media (max-width: 600px) {
+    .sv-header { padding: 16px; }
+    .sv-header h1 { font-size: 18px; }
+    .sv-body { padding: 16px; }
+    .sv-rating-row { grid-template-columns: 1fr; gap: 6px; padding: 8px 0; }
+    .sv-rating-btns button { width: 44px; height: 44px; font-size: 15px; }
+    .sv-rating-btns { justify-content: space-between; width: 100%; }
+    .sv-submit { flex-direction: column; align-items: stretch; }
+    .btn-sv-submit { width: 100%; padding: 14px; font-size: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="sv-wrap" id="app">
+  <!-- Rendered by JS -->
+</div>
+
+<script type="module">
+  import { requireAuth } from './js/auth.js';
+  import { getActiveSurvey, submitSurveyResponse, hasRespondedActiveSurvey } from './js/api.js';
+
+  // ผ่าน guard แต่ไม่ให้ redirect กลับมาซ้ำ
+  const profile = await requireAuth({ requireSurvey: false });
+  if (!profile) throw new Error('not authed');
+
+  // ถ้าตอบแล้ว → เด้งไป dashboard เลย
+  const already = await hasRespondedActiveSurvey();
+  if (already) {
+    window.location.href = 'dashboard.html';
+    throw new Error('already responded');
+  }
+
+  const survey = await getActiveSurvey();
+  if (!survey) {
+    document.getElementById('app').innerHTML =
+      '<div class="sv-body"><p>ไม่มีแบบสอบถามที่เปิดใช้งานอยู่ในขณะนี้</p><p><a href="dashboard.html">ไปหน้าแดชบอร์ด</a></p></div>';
+    throw new Error('no active survey');
+  }
+
+  // =========== QUESTIONS ===========
+  const questions = [
+    { cat: '🎨 ด้านการออกแบบและใช้งาน', items: [
+      [1,'หน้าจอสวยงาม อ่านง่าย เข้าใจง่าย'],
+      [2,'เมนูและปุ่มต่างๆ ใช้งานสะดวก'],
+      [3,'ตัวหนังสือมีขนาดที่เหมาะสม อ่านชัดเจน'],
+      [4,'สีสันของระบบเหมาะสม ไม่ล้าตา'],
+      [5,'ใช้งานง่ายบนโทรศัพท์มือถือ'],
+    ]},
+    { cat: '⚡ ด้านประสิทธิภาพ', items: [
+      [6,'ระบบเปิดหน้าเว็บได้รวดเร็ว'],
+      [7,'บันทึกข้อมูลได้ทันที ไม่ค้าง'],
+      [8,'ระบบเสถียร ไม่ล่มบ่อย'],
+      [9,'รองรับการใช้งานพร้อมกันของครูหลายคน'],
+    ]},
+    { cat: '✅ ด้านฟังก์ชันการใช้งาน', items: [
+      [10,'การเช็คชื่อนักเรียนทำได้ง่ายและรวดเร็ว'],
+      [11,'การบันทึกหลังการสอนใช้งานสะดวก'],
+      [12,'การแนบภาพประกอบการสอนใช้ง่าย'],
+      [13,'รายงานสรุปสถิติมีความครบถ้วน'],
+      [14,'การพิมพ์ / Export เป็น PDF ใช้งานได้ดี'],
+      [15,'การแก้ไขข้อมูลย้อนหลังทำได้สะดวก'],
+      [16,'ระบบเตือนเมื่อเช็คชื่อไม่ครบมีประโยชน์'],
+    ]},
+    { cat: '🔒 ด้านความปลอดภัย', items: [
+      [17,'การเข้าสู่ระบบมีความปลอดภัย'],
+      [18,'ข้อมูลของครูและนักเรียนได้รับการปกป้อง'],
+      [19,'มั่นใจว่าข้อมูลไม่สูญหาย'],
+    ]},
+    { cat: '🎯 ด้านภาพรวม', items: [
+      [20,'ระบบใหม่ (v2) ดีกว่าระบบเดิม (v1)'],
+      [21,'ช่วยลดเวลาการทำงานได้จริง'],
+      [22,'ช่วยให้การเช็คชื่อมีความแม่นยำมากขึ้น'],
+      [23,'ความพึงพอใจโดยรวมต่อระบบ'],
+      [24,'ท่านจะแนะนำระบบนี้ให้เพื่อนครูใช้'],
+    ]},
+  ];
+
+  const state = {
+    gender: null, age_range: null, role: null, experience: null, device: null,
+    like_most: '', improve: '', add_feature: '', problems: '', suggestions: '',
+    scores: {}  // {q1: 5, q2: 4, ...}
+  };
+  for (let i=1; i<=24; i++) state.scores['q'+i] = null;
+
+  // =========== RENDER ===========
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="sv-notice">
+      ⚠️ กรุณาตอบแบบสอบถามให้ครบก่อนใช้งานระบบ (ตอบเพียงครั้งเดียว)
+    </div>
+
+    <div class="sv-header">
+      <h1>📋 ${escapeHtml(survey.title)}</h1>
+      <p>${escapeHtml(survey.description || '')}</p>
+    </div>
+
+    <div class="sv-body">
+      <div class="sv-progress">
+        <div class="label" id="progress-label">ตอบไปแล้ว 0 / 29 ข้อ</div>
+        <div class="bar"><div class="fill" id="progress-fill"></div></div>
+        <div class="label" id="progress-pct">0%</div>
+      </div>
+
+      <!-- Section 1 -->
+      <div class="sv-section">
+        <div class="sv-section-title"><span class="badge">1</span> ข้อมูลทั่วไปของผู้ตอบ</div>
+        ${renderRadios('เพศ', 'gender', [
+          ['ชาย','ชาย'],['หญิง','หญิง'],['ไม่ระบุ','ไม่ระบุ']
+        ], true)}
+        ${renderRadios('อายุ', 'age_range', [
+          ['under30','ต่ำกว่า 30 ปี'],['30-40','30–40 ปี'],['41-50','41–50 ปี'],['51-60','51–60 ปี'],['over60','มากกว่า 60 ปี']
+        ], true)}
+        ${renderRadios('บทบาทในการใช้ระบบ', 'role', [
+          ['teacher','ครูผู้สอน'],['staff','เจ้าหน้าที่'],['executive','ผู้บริหาร'],['admin','ผู้ดูแลระบบ']
+        ], true)}
+        ${renderRadios('ประสบการณ์ใช้ระบบ', 'experience', [
+          ['lt1m','น้อยกว่า 1 เดือน'],['1-3m','1–3 เดือน'],['4-6m','4–6 เดือน'],['gt6m','มากกว่า 6 เดือน']
+        ], false)}
+        ${renderRadios('อุปกรณ์ที่ใช้บ่อยที่สุด', 'device', [
+          ['mobile','📱 โทรศัพท์มือถือ'],['tablet','📲 แท็บเล็ต'],['desktop','🖥️ คอมพิวเตอร์'],['laptop','💻 โน้ตบุ๊ก']
+        ], false)}
+      </div>
+
+      <!-- Section 2 -->
+      <div class="sv-section">
+        <div class="sv-section-title"><span class="badge">2</span> ความพึงพอใจต่อระบบ (24 ข้อ)</div>
+        <div class="sv-legend">5 = มากที่สุด · 4 = มาก · 3 = ปานกลาง · 2 = น้อย · 1 = น้อยที่สุด</div>
+        ${questions.map(g => `
+          <div class="sv-cat-title">${g.cat}</div>
+          ${g.items.map(([n, q]) => `
+            <div class="sv-rating-row" data-q="q${n}">
+              <div class="sv-rating-q"><span class="num">${n}.</span>${escapeHtml(q)}</div>
+              <div class="sv-rating-btns">
+                ${[1,2,3,4,5].map(v => `<button type="button" data-v="${v}">${v}</button>`).join('')}
+              </div>
+            </div>
+          `).join('')}
+        `).join('')}
+      </div>
+
+      <!-- Section 3 -->
+      <div class="sv-section">
+        <div class="sv-section-title"><span class="badge">3</span> ความคิดเห็นเพิ่มเติม (ไม่บังคับ)</div>
+        ${renderTextarea('ฟังก์ชันที่ท่านชอบมากที่สุด', 'like_most')}
+        ${renderTextarea('ฟังก์ชันที่ควรปรับปรุง', 'improve')}
+        ${renderTextarea('อยากให้เพิ่มฟังก์ชันใดในอนาคต', 'add_feature')}
+        ${renderTextarea('ปัญหา / อุปสรรคที่พบระหว่างการใช้งาน', 'problems')}
+        ${renderTextarea('ข้อเสนอแนะอื่นๆ', 'suggestions')}
+      </div>
+
+      <div class="sv-submit">
+        <div class="err" id="err-msg"></div>
+        <button class="btn-sv-submit" id="btn-submit">📤 ส่งแบบสอบถาม</button>
+      </div>
+    </div>
+  `;
+
+  // Prefill role from profile if possible
+  if (profile.role === 'admin') state.role = 'admin';
+  else if (profile.role === 'executive') state.role = 'executive';
+  else state.role = 'teacher';  // default; user เปลี่ยนได้เอง
+  // Highlight prefilled role
+  document.querySelectorAll('.sv-radios[data-name="role"] label').forEach(l => {
+    if (l.querySelector('input')?.value === state.role) l.classList.add('checked');
+  });
+
+  // =========== EVENTS ===========
+  // Radio
+  document.querySelectorAll('.sv-radios').forEach(group => {
+    group.addEventListener('click', e => {
+      const label = e.target.closest('label');
+      if (!label) return;
+      const input = label.querySelector('input');
+      if (!input) return;
+      const name = group.dataset.name;
+      state[name] = input.value;
+      group.querySelectorAll('label').forEach(l => l.classList.remove('checked'));
+      label.classList.add('checked');
+      updateProgress();
+    });
+  });
+
+  // Rating
+  document.querySelectorAll('.sv-rating-row').forEach(row => {
+    row.addEventListener('click', e => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const qKey = row.dataset.q;
+      const v = parseInt(btn.dataset.v);
+      state.scores[qKey] = v;
+      row.querySelectorAll('button').forEach(b => b.classList.remove('on','on-5','on-4'));
+      btn.classList.add('on');
+      if (v === 5) btn.classList.add('on-5');
+      if (v === 4) btn.classList.add('on-4');
+      updateProgress();
+    });
+  });
+
+  // Textarea
+  document.querySelectorAll('textarea.sv-textarea').forEach(ta => {
+    ta.addEventListener('input', e => {
+      state[ta.dataset.name] = ta.value;
+    });
+  });
+
+  // Submit
+  document.getElementById('btn-submit').addEventListener('click', onSubmit);
+  updateProgress();
+
+  // =========== HELPERS ===========
+  function renderRadios(label, name, opts, required) {
+    return `
+      <div class="sv-field">
+        <label class="sv-field-label">${escapeHtml(label)} ${required ? '<span class="req">*</span>' : ''}</label>
+        <div class="sv-radios" data-name="${name}">
+          ${opts.map(([v, t]) => `
+            <label><input type="radio" name="${name}" value="${v}">${escapeHtml(t)}</label>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+  function renderTextarea(label, name) {
+    return `
+      <div class="sv-field">
+        <label class="sv-field-label">${escapeHtml(label)}</label>
+        <textarea class="sv-textarea" data-name="${name}" rows="2"></textarea>
+      </div>
+    `;
+  }
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function updateProgress() {
+    // Required = 3 fields (gender, age, role) + 24 questions = 27
+    // ที่จริงเรานับ 5 fields ส่วน 1 + 24 = 29
+    let done = 0;
+    ['gender','age_range','role','experience','device'].forEach(k => { if (state[k]) done++; });
+    for (let i=1; i<=24; i++) if (state.scores['q'+i]) done++;
+    const total = 29;
+    const pct = Math.round(done/total*100);
+    document.getElementById('progress-label').textContent = `ตอบไปแล้ว ${done} / ${total} ข้อ`;
+    document.getElementById('progress-pct').textContent = pct + '%';
+    document.getElementById('progress-fill').style.width = pct + '%';
+  }
+
+  async function onSubmit() {
+    document.getElementById('err-msg').textContent = '';
+    // Validate required
+    const missing = [];
+    if (!state.gender) missing.push('เพศ');
+    if (!state.age_range) missing.push('อายุ');
+    if (!state.role) missing.push('บทบาท');
+    const unanswered = [];
+    for (let i=1; i<=24; i++) if (!state.scores['q'+i]) unanswered.push(i);
+    if (missing.length || unanswered.length) {
+      let msg = '❌ กรุณาตอบให้ครบ: ';
+      if (missing.length) msg += missing.join(', ');
+      if (unanswered.length) msg += (missing.length ? ' · ' : '') + `ข้อคะแนนที่ยังไม่ตอบ: ${unanswered.join(', ')}`;
+      document.getElementById('err-msg').textContent = msg;
+      // scroll to first unanswered
+      const first = unanswered[0];
+      if (first) {
+        const el = document.querySelector(`.sv-rating-row[data-q="q${first}"]`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+
+    const btn = document.getElementById('btn-submit');
+    btn.disabled = true;
+    btn.textContent = '⏳ กำลังส่ง...';
+
+    try {
+      const payload = {
+        gender: state.gender, age_range: state.age_range, role: state.role,
+        experience: state.experience, device: state.device,
+        like_most: state.like_most || null,
+        improve: state.improve || null,
+        add_feature: state.add_feature || null,
+        problems: state.problems || null,
+        suggestions: state.suggestions || null,
+        ...state.scores
+      };
+      await submitSurveyResponse(survey.id, payload);
+      showSuccess();
+    } catch (e) {
+      console.error(e);
+      document.getElementById('err-msg').textContent = '❌ เกิดข้อผิดพลาด: ' + (e.message || 'ไม่ทราบสาเหตุ');
+      btn.disabled = false;
+      btn.textContent = '📤 ส่งแบบสอบถาม';
+    }
+  }
+
+  function showSuccess() {
+    document.getElementById('app').innerHTML = `
+      <div class="sv-body sv-success">
+        <div class="icon">✅</div>
+        <h2>ขอบคุณที่ตอบแบบสอบถาม</h2>
+        <p>ข้อมูลของท่านจะนำไปพัฒนาระบบให้ดียิ่งขึ้น</p>
+        <p>กำลังนำท่านไปยังหน้าใช้งานระบบ...</p>
+        <button onclick="window.location.href='dashboard.html'">ไปที่แดชบอร์ด →</button>
+      </div>
+    `;
+    setTimeout(() => { window.location.href = 'dashboard.html'; }, 2500);
+  }
+</script>
+
+</body>
+</html>

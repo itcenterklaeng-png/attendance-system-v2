@@ -74,7 +74,7 @@ export async function getProfile() {
  * ถ้า must_change_password = true → redirect ไป change-password.html (ยกเว้นอยู่หน้านั้นอยู่แล้ว)
  * คืน profile กลับถ้าผ่าน
  */
-export async function requireAuth({ requireChangePassword = true } = {}) {
+export async function requireAuth({ requireChangePassword = true, requireSurvey = true } = {}) {
   const session = await getSession();
   if (!session) {
     window.location.href = 'login.html';
@@ -99,6 +99,24 @@ export async function requireAuth({ requireChangePassword = true } = {}) {
       return null;
     }
   }
+
+  // 📋 Survey Guard — บังคับตอบแบบสอบถามความพึงพอใจก่อนใช้งาน
+  if (requireSurvey) {
+    const path = window.location.pathname;
+    const isSurveyPage = path.endsWith('survey.html') || path.endsWith('survey-results.html');
+    if (!isSurveyPage) {
+      try {
+        const { data: hasResponded } = await supabase.rpc('has_responded_active_survey');
+        if (hasResponded === false) {
+          window.location.href = 'survey.html';
+          return null;
+        }
+      } catch (e) {
+        console.warn('survey check failed (ignored):', e?.message);
+      }
+    }
+  }
+
   return profile;
 }
 
