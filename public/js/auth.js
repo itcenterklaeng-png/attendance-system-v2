@@ -101,7 +101,8 @@ export async function requireAuth({ requireChangePassword = true, requireSurvey 
   }
 
   // 📋 Survey Guard — บังคับตอบแบบสอบถามความพึงพอใจก่อนใช้งาน
-  if (requireSurvey) {
+  // ⭐ Skip เมื่อ user ยังต้องเปลี่ยนรหัสผ่าน (change-password ต้องมาก่อน)
+  if (requireSurvey && !profile.must_change_password) {
     const path = window.location.pathname;
     const isSurveyPage = path.endsWith('survey.html') || path.endsWith('survey-results.html');
     if (!isSurveyPage) {
