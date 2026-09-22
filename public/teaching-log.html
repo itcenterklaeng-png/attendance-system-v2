@@ -201,6 +201,11 @@
       const wantedSubject = params.get('subject');
       const wantedDate    = params.get('date');
       if (wantedSubject) elSubject.value = wantedSubject;
+      // ⭐ ถ้ามี wantedDate → ขยายช่วงวันที่ให้ครอบคลุม (ไม่งั้นหา log เดิมไม่เจอ ถ้าเก่ากว่า 30 วัน)
+      if (wantedDate) {
+        if (wantedDate < elFrom.value) elFrom.value = wantedDate;
+        if (wantedDate > elTo.value)   elTo.value   = wantedDate;
+      }
       await loadLogs();
 
       // ⭐ ถ้ามาจาก URL พร้อม date → auto-open modal สำหรับวันนั้นๆ
